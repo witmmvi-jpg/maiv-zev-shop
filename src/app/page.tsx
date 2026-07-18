@@ -726,7 +726,7 @@ export default function Home() {
     if (!product) return false;
 
     // Must have a completed order ('ส่งสำเร็จ') containing the product
-    return orders.some(order => 
+    return orders.some(order =>
       order.username === currentUser.username &&
       order.orderStatus === 'ส่งสำเร็จ' &&
       order.items.some(item => item.productName === product.name)
@@ -1055,7 +1055,7 @@ export default function Home() {
     const normalized = text.toLowerCase().replace(/[\s\-\_\.\,\?\!\*]+/g, '');
 
     const exactBadWords = [
-      'เหี้ย', 'ควย', 'เย็ด', 'เฆ็ด', 'ตอแหล', 'ดอกทอง', 'กะหรี่', 'กระหรี่', 
+      'เหี้ย', 'ควย', 'เย็ด', 'เฆ็ด', 'ตอแหล', 'ดอกทอง', 'กะหรี่', 'กระหรี่',
       'ส้นตีน', 'พ่อง', 'สัส', 'หน้าหี', 'อีหี', 'เย็ดแม่', 'ชาติชั่ว', 'ระยำ',
       'จัญไร', 'อิดอก', 'แม่ง', 'พ่องตาย', 'พ่อมึงตาย', 'แม่มึงตาย', 'ควยเอ้ย',
       'บัดซบ', 'หัวควย', 'หน้าเหี้ย'
@@ -1118,7 +1118,7 @@ export default function Home() {
 
     // Insults with animal names
     if (normalized.includes('ไอ้ควาย') || normalized.includes('อีควาย') || normalized.includes('หน้าควาย') ||
-        normalized.includes('ไอ้สัตว์') || normalized.includes('อีสัตว์') || normalized.includes('ไอ้สัส') || normalized.includes('อีสัส')) {
+      normalized.includes('ไอ้สัตว์') || normalized.includes('อีสัตว์') || normalized.includes('ไอ้สัส') || normalized.includes('อีสัส')) {
       return true;
     }
 
@@ -1780,7 +1780,7 @@ export default function Home() {
                       <div className="bg-white rounded-3xl p-6 border border-stone-200/60 shadow-sm space-y-6">
                         {(() => {
                           const paid = orders.filter(o => o.paymentStatus === 'ชำระเงินแล้ว');
-                          
+
                           // Extract unique year-month strings from paid orders
                           const availableMonths = Array.from(new Set(
                             paid
@@ -3147,7 +3147,7 @@ export default function Home() {
                             className="group bg-white rounded-3xl overflow-hidden border border-stone-100 md:hover:border-emerald-200/60 shadow-sm md:hover:shadow-xl transition-all duration-300 flex flex-col md:transform md:hover:-translate-y-1.5"
                           >
                             {/* Product Image */}
-                            <div 
+                            <div
                               onClick={() => setSelectedProductDetail(product)}
                               className="relative w-full aspect-square bg-stone-50 overflow-hidden cursor-pointer"
                             >
@@ -3176,7 +3176,7 @@ export default function Home() {
                                     </span>
                                   )}
                                 </div>
-                                <h4 
+                                <h4
                                   onClick={() => setSelectedProductDetail(product)}
                                   className="text-xl font-bold text-stone-900 group-hover:text-emerald-800 transition-colors cursor-pointer"
                                 >
@@ -4755,7 +4755,7 @@ export default function Home() {
             <div className="w-full md:w-1/2 flex flex-col gap-6 max-h-[80vh] md:max-h-full overflow-y-auto pr-1">
               <div>
                 <h3 className="text-2xl font-extrabold text-stone-900">{selectedProductDetail.name}</h3>
-                
+
                 {/* Stats row */}
                 <div className="flex flex-wrap items-center gap-3 mt-2 text-xs font-semibold">
                   {(() => {
@@ -5143,6 +5143,7 @@ export default function Home() {
       )}
 
       {/* Custom Alert Modal */}
+
       {customAlert && (
         <div className="fixed inset-0 z-[999] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-in fade-in duration-200">
           <div className="bg-white w-full max-w-sm rounded-[32px] p-6 shadow-2xl border border-stone-100 flex flex-col items-center text-center animate-in zoom-in-95 duration-200">
