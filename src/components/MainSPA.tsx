@@ -937,7 +937,7 @@ export default function MainSPA({ initialPage = 'home' }: { initialPage?: 'home'
       return;
     }
 
-    globalUpdateQuantity(product.name, currentQty + 1);
+    globalAddToCart({ productName: product.name, quantity: 1, price: product.price, unit: product.unit });
   };
 
   const removeFromCart = (productId: string) => {
