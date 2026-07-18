@@ -16,17 +16,27 @@ export const metadata: Metadata = {
   },
 };
 
+import AuthProvider from "@/providers/AuthProvider";
+import CartProvider from "@/providers/CartProvider";
+import Navbar from "@/components/layout/Navbar";
+import Footer from "@/components/layout/Footer";
+
 export default function RootLayout({
   children,
 }: Readonly<{
   children: React.ReactNode;
 }>) {
   return (
-    <html
-      lang="th"
-      className={`${kanit.variable} h-full antialiased`}
-    >
-      <body className="min-h-full flex flex-col font-sans">{children}</body>
+    <html lang="th" className={`${kanit.variable} h-full antialiased`}>
+      <body className="min-h-full flex flex-col font-sans bg-stone-50">
+        <AuthProvider>
+          <CartProvider>
+            <Navbar />
+            <main className="flex-1 flex flex-col">{children}</main>
+            <Footer />
+          </CartProvider>
+        </AuthProvider>
+      </body>
     </html>
   );
 }
