@@ -1,0 +1,1892 @@
+'use client';
+
+import { useState } from 'react';
+import Image from 'next/image';
+
+interface Product {
+  id: string;
+  name: string;
+  price: number;
+  unit: string;
+  image: string;
+  category: string;
+}
+
+interface UserProfile {
+  username: string;
+  email: string;
+  role: 'Admin' | 'Member' | 'User';
+}
+
+const mockUsers: UserProfile[] = [
+  { username: 'สมชาย สมาชิกพรีเมียม', email: 'somchai@maivzev.com', role: 'Member' },
+  { username: 'แอดมินสวน', email: 'admin@maivzev.com', role: 'Admin' },
+  { username: 'สมจิต ลูกค้าทั่วไป', email: 'somjit@maivzev.com', role: 'User' },
+];
+
+interface OrderItem {
+  productName: string;
+  quantity: number;
+  price: number;
+  unit: string;
+}
+
+interface Order {
+  id: string;
+  username: string;
+  items: OrderItem[];
+  totalPrice: number;
+  paymentMethod: string;
+  paymentStatus: 'รอตรวจสอบ' | 'ชำระเงินแล้ว' | 'ล้มเหลว';
+  orderStatus: 'รอดำเนินการ' | 'กำลังจัดส่ง' | 'ส่งสำเร็จ' | 'ยกเลิก';
+  createdAt: string;
+  slipUrl?: string;
+}
+
+export default function Home() {
+  // Products list matching the user design
+  const initialProducts: Product[] = [
+    {
+      id: 'p1',
+      name: 'องุ่นไร้เมล็ด',
+      price: 120,
+      unit: 'กก.',
+      image: '/images/black_grapes.png',
+      category: 'ผลไม้สด',
+    },
+    {
+      id: 'p2',
+      name: 'องุ่นแดง',
+      price: 100,
+      unit: 'กก.',
+      image: '/images/red_grapes.png',
+      category: 'ผลไม้สด',
+    },
+    {
+      id: 'p3',
+      name: 'ข้าวหอมมะลิ',
+      price: 40,
+      unit: 'กก.',
+      image: '/images/jasmine_rice.png',
+      category: 'ข้าวสาร',
+    },
+    {
+      id: 'p4',
+      name: 'ข้าวเหนียว',
+      price: 45,
+      unit: 'กก.',
+      image: '/images/sticky_rice.png',
+      category: 'ข้าวสาร',
+    },
+  ];
+
+  const [products, setProducts] = useState<Product[]>(initialProducts);
+
+  const initialOrders: Order[] = [
+    {
+      id: 'ORD-001',
+      username: 'สมชาย สมาชิกพรีเมียม',
+      items: [
+        { productName: 'องุ่นไร้เมล็ด', quantity: 5, price: 120, unit: 'กก.' },
+        { productName: 'ข้าวหอมมะลิ', quantity: 4, price: 40, unit: 'กก.' }
+      ],
+      totalPrice: 760,
+      paymentMethod: 'โอนเงินผ่านธนาคาร',
+      paymentStatus: 'ชำระเงินแล้ว',
+      orderStatus: 'กำลังจัดส่ง',
+      createdAt: '2026-05-24 14:32'
+    },
+    {
+      id: 'ORD-002',
+      username: 'สมจิต ลูกค้าทั่วไป',
+      items: [
+        { productName: 'องุ่นแดง', quantity: 3, price: 100, unit: 'กก.' }
+      ],
+      totalPrice: 300,
+      paymentMethod: 'พร้อมเพย์ (PromptPay)',
+      paymentStatus: 'รอตรวจสอบ',
+      orderStatus: 'รอดำเนินการ',
+      createdAt: '2026-05-25 09:15',
+      slipUrl: '/images/mock_slip.png'
+    }
+  ];
+
+  const [orders, setOrders] = useState<Order[]>(initialOrders);
+  const [users, setUsers] = useState<UserProfile[]>(mockUsers);
+
+  // Cart state
+  const [cart, setCart] = useState<{ [key: string]: number }>({
+    p1: 5, // prefilled items to match the user's header count "12"
+    p2: 3,
+    p3: 4,
+  });
+  const [isCartOpen, setIsCartOpen] = useState(false);
+  const [selectedCartItems, setSelectedCartItems] = useState<{ [key: string]: boolean }>({});
+
+  const isItemSelected = (id: string) => {
+    return selectedCartItems[id] !== false; // selected by default
+  };
+
+  const toggleItemSelection = (id: string) => {
+    setSelectedCartItems(prev => ({
+      ...prev,
+      [id]: prev[id] === false ? true : false
+    }));
+  };
+  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+  const [activePage, setActivePage] = useState<'home' | 'products' | 'delivery'>('home');
+  const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
+  const [currentUser, setCurrentUser] = useState<UserProfile | null>(mockUsers[0]);
+  const [isUserDropdownOpen, setIsUserDropdownOpen] = useState(false);
+
+  // Admin states
+  const [viewMode, setViewMode] = useState<'shop' | 'admin'>('shop');
+  const [adminTab, setAdminTab] = useState<'products' | 'orders' | 'members' | 'payments'>('products');
+  const [isProductModalOpen, setIsProductModalOpen] = useState(false);
+  const [editingProduct, setEditingProduct] = useState<Product | null>(null);
+  const [selectedOrder, setSelectedOrder] = useState<Order | null>(null);
+  const [productForm, setProductForm] = useState<{
+    name: string;
+    price: number;
+    unit: string;
+    image: string;
+    category: string;
+  }>({
+    name: '',
+    price: 0,
+    unit: 'กก.',
+    image: '',
+    category: 'ผลไม้สด',
+  });
+
+  // Member checkout & history states
+  const [shippingAddress, setShippingAddress] = useState('');
+  const [paymentMethod, setPaymentMethod] = useState('พร้อมเพย์ (PromptPay)');
+  const [isOrderHistoryOpen, setIsOrderHistoryOpen] = useState(false);
+  const [slipPreview, setSlipPreview] = useState<string | null>(null);
+  const [viewingSlipUrl, setViewingSlipUrl] = useState<string | null>(null);
+  const [checkoutStep, setCheckoutStep] = useState<1 | 2>(1);
+
+  // Categories metadata matching the user request (Rice and Fruit)
+  const categories = [
+    {
+      id: 'rice',
+      name: 'ข้าวสาร',
+      description: 'ข้าวหอมมะลิ ข้าวเหนียว คุณภาพระดับพรีเมียม คัดสรรจากธรรมชาติ ปลอดสารเคมี 100%',
+      image: '/images/jasmine_rice.png',
+      count: products.filter(p => p.category === 'ข้าวสาร').length,
+      gradient: 'from-amber-500/10 to-emerald-500/10 hover:from-amber-500/20 hover:to-emerald-500/20',
+      badgeColor: 'bg-amber-100 text-amber-800 border-amber-200',
+    },
+    {
+      id: 'fruit',
+      name: 'ผลไม้สด',
+      description: 'องุ่นไร้เมล็ด องุ่นแดงหวานกรอบ ปลูกและคัดสรรพิเศษ ปลอดภัย สดใหม่จากสวนคุณยาย',
+      image: '/images/red_grapes.png',
+      count: products.filter(p => p.category === 'ผลไม้สด').length,
+      gradient: 'from-purple-500/10 to-pink-500/10 hover:from-purple-500/20 hover:to-pink-500/20',
+      badgeColor: 'bg-purple-100 text-purple-800 border-purple-200',
+    }
+  ];
+
+  // Calculate totals
+  const totalItems = Object.values(cart).reduce((sum, qty) => sum + qty, 0);
+  const wishlistCount = 2; // static wishlist count to match "2" in design
+
+  const addToCart = (productId: string) => {
+    setCart((prev) => ({
+      ...prev,
+      [productId]: (prev[productId] || 0) + 1,
+    }));
+  };
+
+  const removeFromCart = (productId: string) => {
+    setCart((prev) => {
+      const updated = { ...prev };
+      if (updated[productId] > 1) {
+        updated[productId] -= 1;
+      } else {
+        delete updated[productId];
+      }
+      return updated;
+    });
+  };
+
+  const calculateTotalPrice = () => {
+    return Object.entries(cart).reduce((sum, [id, qty]) => {
+      const product = products.find((p) => p.id === id);
+      const isSelected = selectedCartItems[id] !== false;
+      return sum + (product && isSelected ? product.price * qty : 0);
+    }, 0);
+  };
+
+  const handleSlipChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        setSlipPreview(reader.result as string);
+      };
+      reader.readAsDataURL(file);
+    }
+  };
+
+  return (
+    <div className="min-h-screen bg-[#fafaf6] text-stone-800 flex flex-col selection:bg-emerald-500 selection:text-white">
+      {/* 1. Header (Navigation Bar) */}
+      <header className="sticky top-0 z-40 bg-[#166534] text-white shadow-md">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="flex items-center justify-between h-20">
+            {/* Logo */}
+            <div onClick={() => { setActivePage('home'); setSelectedCategory(null); }} className="flex items-center gap-3 cursor-pointer">
+              <div className="bg-white/10 p-2.5 rounded-full backdrop-blur-sm">
+                <svg className="w-8 h-8 text-emerald-300" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364-6.364l-.707.707M6.343 17.657l-.707.707m0-12.728l.707.707m12.728 12.728l.707-.707M12 8a4 4 0 100 8 4 4 0 000-8z" />
+                </svg>
+              </div>
+              <div>
+                <h1 className="text-xl font-bold tracking-wide leading-tight">Maiv Zev </h1>
+                <p className="text-xs text-emerald-200/90 font-light">สดจากสวน ส่งตรงถึงบ้านคุณ</p>
+              </div>
+            </div>
+
+            {/* Desktop Navigation */}
+            <nav className="hidden md:flex items-center gap-8 text-base font-medium">
+              <a href="#" onClick={(e) => { e.preventDefault(); setActivePage('home'); setSelectedCategory(null); }} className={`${activePage === 'home' ? 'text-white underline decoration-2 underline-offset-4' : 'text-emerald-100 hover:text-emerald-200'} transition-colors`}>หน้าแรก</a>
+              <a href="#" onClick={(e) => { e.preventDefault(); setActivePage('products'); setSelectedCategory(null); }} className={`${activePage === 'products' ? 'text-white underline decoration-2 underline-offset-4' : 'text-emerald-100 hover:text-emerald-200'} transition-colors`}>สินค้า</a>
+              <a href="#" onClick={(e) => { e.preventDefault(); setActivePage('delivery'); }} className={`${activePage === 'delivery' ? 'text-white underline decoration-2 underline-offset-4' : 'text-emerald-100 hover:text-emerald-200'} transition-colors`}>วิธีสั่งซื้อ</a>
+              <a href="#contact-section" className="text-emerald-100 hover:text-emerald-200 transition-colors">ติดต่อเรา</a>
+            </nav>
+
+            {/* Icons */}
+            <div className="flex items-center gap-4">
+              {/* User Profile Button with Dropdown (Login State) */}
+              <div className="relative">
+                <button
+                  onClick={() => setIsUserDropdownOpen(!isUserDropdownOpen)}
+                  className="flex items-center gap-2 p-1 hover:bg-white/10 rounded-full transition-all duration-200 focus:outline-none"
+                  title="ข้อมูลผู้ใช้งาน"
+                >
+                  {currentUser ? (
+                    <div className="relative flex items-center justify-center w-10 h-10 rounded-full bg-emerald-100 text-emerald-850 font-bold border-2 border-emerald-300 shadow-sm overflow-hidden hover:scale-105 transition-transform duration-200">
+                      <span className="text-lg">{currentUser.username.charAt(0)}</span>
+                    </div>
+                  ) : (
+                    <div className="flex items-center justify-center w-10 h-10 rounded-full bg-white/10 text-emerald-200 border-2 border-white/20 hover:scale-105 transition-transform duration-200">
+                      <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+                      </svg>
+                    </div>
+                  )}
+                </button>
+
+                {/* Dropdown Menu */}
+                {isUserDropdownOpen && (
+                  <div className="absolute right-0 mt-3 w-72 bg-white rounded-2xl shadow-2xl border border-stone-100 py-3 text-stone-800 z-50">
+                    {currentUser ? (
+                      <div>
+                        {/* User Info Header */}
+                        <div className="px-5 py-3 border-b border-stone-100">
+                          <div className="flex items-center gap-3">
+                            <div className="w-10 h-10 rounded-full bg-emerald-100 text-emerald-800 flex items-center justify-center font-bold text-lg">
+                              {currentUser.username.charAt(0)}
+                            </div>
+                            <div className="min-w-0">
+                              <p className="font-bold text-stone-900 truncate text-sm">{currentUser.username}</p>
+                              <p className="text-xs text-stone-505 truncate">{currentUser.email}</p>
+                            </div>
+                          </div>
+                          <div className="mt-3 flex items-center gap-1.5">
+                            <span className="text-xs text-stone-500 font-medium">ระดับ:</span>
+                            <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${currentUser.role === 'Admin' ? 'bg-purple-50 text-purple-700 border-purple-200' :
+                              currentUser.role === 'Member' ? 'bg-emerald-50 text-emerald-700 border-emerald-200' :
+                                'bg-stone-100 text-stone-700 border-stone-300'
+                              }`}>
+                              {currentUser.role}
+                            </span>
+                          </div>
+                        </div>
+
+                        {/* Switch Accounts section */}
+                        <div className="px-2 py-2 border-b border-stone-100">
+                          <p className="px-3 py-1 text-[10px] font-bold text-stone-400 uppercase tracking-wider">สลับบัญชีทดสอบ</p>
+                          {mockUsers.map((user) => (
+                            <button
+                              key={user.role}
+                              onClick={() => {
+                                setCurrentUser(user);
+                                setIsUserDropdownOpen(false);
+                              }}
+                              className={`w-full text-left px-3 py-1.5 rounded-xl text-xs transition-colors flex items-center justify-between hover:bg-stone-50 ${currentUser.role === user.role ? 'font-bold bg-emerald-50/50 text-emerald-850' : 'text-stone-700'
+                                }`}
+                            >
+                              <div className="flex flex-col">
+                                <span className="font-semibold text-[10px] text-stone-450">{user.role}</span>
+                                <span>{user.username}</span>
+                              </div>
+                              {currentUser.role === user.role && (
+                                <svg className="w-3.5 h-3.5 text-emerald-600" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M5 13l4 4L19 7" />
+                                </svg>
+                              )}
+                            </button>
+                          ))}
+                        </div>
+
+                        {/* Actions */}
+                        <div className="px-2 pt-2 space-y-1">
+                          {currentUser && (
+                            <button
+                              onClick={() => {
+                                setIsOrderHistoryOpen(true);
+                                setIsUserDropdownOpen(false);
+                              }}
+                              className="w-full text-left px-3 py-2 rounded-xl text-xs bg-emerald-50 text-emerald-800 hover:bg-emerald-100 font-bold transition-colors flex items-center gap-2 border border-emerald-200"
+                            >
+                              <svg className="w-4 h-4 text-emerald-600" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01" />
+                              </svg>
+                              📦 ประวัติการสั่งซื้อของฉัน
+                            </button>
+                          )}
+                          {currentUser.role === 'Admin' && (
+                            <button
+                              onClick={() => {
+                                setViewMode(viewMode === 'admin' ? 'shop' : 'admin');
+                                setIsUserDropdownOpen(false);
+                              }}
+                              className="w-full text-left px-3 py-2 rounded-xl text-xs bg-purple-50 text-purple-700 hover:bg-purple-100 font-bold transition-colors flex items-center gap-2 border border-purple-200"
+                            >
+                              <svg className="w-4 h-4 text-purple-600" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                              </svg>
+                              {viewMode === 'admin' ? '🛒 เข้าสู่หน้าร้านค้า' : '⚙️ ระบบดูแลระบบ (Admin Panel)'}
+                            </button>
+                          )}
+                          <button
+                            onClick={() => {
+                              setCurrentUser(null);
+                              setViewMode('shop');
+                              setIsUserDropdownOpen(false);
+                            }}
+                            className="w-full text-left px-3 py-2 rounded-xl text-xs text-red-650 hover:bg-red-50 hover:text-red-700 font-semibold transition-colors flex items-center gap-2"
+                          >
+                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
+                            </svg>
+                            ออกจากระบบ
+                          </button>
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="p-4 text-center">
+                        <p className="text-xs text-stone-500 mb-3 font-medium">ยังไม่ได้เข้าสู่ระบบ</p>
+                        <button
+                          onClick={() => {
+                            setCurrentUser(mockUsers[0]);
+                            setIsUserDropdownOpen(false);
+                          }}
+                          className="w-full bg-[#166534] hover:bg-emerald-800 text-white font-bold py-2 rounded-xl text-xs transition-colors"
+                        >
+                          เข้าสู่ระบบ (จำลอง)
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+
+              {/* Cart Button (Matches "12)" in the design) */}
+              {currentUser && currentUser.role !== 'User' && (
+                <button
+                  onClick={() => {
+                    setCheckoutStep(1);
+                    setIsCartOpen(true);
+                  }}
+                  className="relative p-2.5 hover:bg-white/10 rounded-full transition-all duration-200 focus:outline-none"
+                >
+                  <svg className="w-6 h-6 text-emerald-200 hover:text-white transition-colors" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M3 3h2l.4 2M7 13h10l4-8H5.4M7 13L5.4 5M7 13l-2.293 2.293c-.63.63-.184 1.707.707 1.707H17m0 0a2 2 0 100 4 2 2 0 000-4zm-8 2a2 2 0 11-4 0 2 2 0 014 0z" />
+                  </svg>
+                  {totalItems > 0 && (
+                    <span className="absolute top-0.5 right-0.5 bg-yellow-400 text-stone-900 text-xs font-bold rounded-full w-5 h-5 flex items-center justify-center shadow-sm animate-pulse">
+                      {totalItems}
+                    </span>
+                  )}
+                </button>
+              )}
+
+              {/* Mobile menu button */}
+              <button
+                onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
+                className="md:hidden p-2 hover:bg-white/10 rounded-full transition-colors focus:outline-none"
+              >
+                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                  {isMobileMenuOpen ? (
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" />
+                  ) : (
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 6h16M4 12h16M4 18h16" />
+                  )}
+                </svg>
+              </button>
+            </div>
+          </div>
+        </div>
+
+        {/* Mobile Navigation Menu */}
+        {isMobileMenuOpen && (
+          <div className="md:hidden bg-[#0f4c27] px-4 pt-2 pb-4 space-y-1 transition-all">
+            <a href="#" onClick={(e) => { e.preventDefault(); setActivePage('home'); setSelectedCategory(null); setIsMobileMenuOpen(false); }} className={`block px-3 py-2 rounded-md hover:bg-emerald-800 text-white font-medium ${activePage === 'home' ? 'bg-[#0b3c1e]' : ''}`}>หน้าแรก</a>
+            <a href="#" onClick={(e) => { e.preventDefault(); setActivePage('products'); setSelectedCategory(null); setIsMobileMenuOpen(false); }} className={`block px-3 py-2 rounded-md hover:bg-emerald-800 text-emerald-100 ${activePage === 'products' ? 'bg-[#0b3c1e] text-white font-medium' : ''}`}>สินค้า</a>
+            <a href="#" onClick={(e) => { e.preventDefault(); setActivePage('delivery'); setIsMobileMenuOpen(false); }} className={`block px-3 py-2 rounded-md hover:bg-emerald-800 text-emerald-100 ${activePage === 'delivery' ? 'bg-[#0b3c1e] text-white font-medium' : ''}`}>วิธีสั่งซื้อ</a>
+            <a href="#contact-section" onClick={() => setIsMobileMenuOpen(false)} className="block px-3 py-2 rounded-md hover:bg-emerald-800 text-emerald-100">ติดต่อเรา</a>
+          </div>
+        )}
+      </header>
+
+      {viewMode === 'admin' ? (
+        <div className="flex-1 bg-stone-50 min-h-screen pb-12 animate-in fade-in duration-300">
+          {/* Admin Header Bar */}
+          <div className="bg-white border-b border-stone-200 py-5 px-4 sm:px-6 lg:px-8 shadow-sm">
+            <div className="max-w-7xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-4">
+              <div className="flex items-center gap-3">
+                <div className="p-3 bg-purple-100 text-purple-750 rounded-2xl">
+                  <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                  </svg>
+                </div>
+                <div>
+                  <h2 className="text-2xl font-bold text-stone-900">แผงจัดการข้อมูลระบบ (Admin Panel)</h2>
+                  <p className="text-xs text-stone-500 font-medium">สิทธิ์ปัจจุบัน: {currentUser?.username} ({currentUser?.role})</p>
+                </div>
+              </div>
+              <button
+                onClick={() => setViewMode('shop')}
+                className="bg-white border border-stone-300 hover:bg-stone-50 text-stone-750 text-sm font-bold px-5 py-2.5 rounded-full transition-all shadow-sm flex items-center gap-2"
+              >
+                🛒 กลับไปหน้าร้านค้า
+              </button>
+            </div>
+          </div>
+
+          <div className="max-w-7xl mx-auto py-8 px-4 sm:px-6 lg:px-8">
+            <div className="grid grid-cols-1 lg:grid-cols-4 gap-8">
+              {/* Sidebar Menu */}
+              <div className="bg-white rounded-3xl p-5 border border-stone-200/60 shadow-sm flex flex-col gap-2 h-fit">
+                <p className="text-xs font-bold text-stone-400 uppercase tracking-wider px-3 mb-2">เมนูหลัก</p>
+
+                <button
+                  onClick={() => setAdminTab('products')}
+                  className={`w-full text-left px-4 py-3.5 rounded-2xl font-bold text-sm transition-all flex items-center gap-3 ${adminTab === 'products' ? 'bg-purple-50 text-purple-700 border-l-4 border-purple-600' : 'text-stone-600 hover:bg-stone-50'
+                    }`}
+                >
+                  <span>🏷️</span> จัดการสินค้า
+                </button>
+
+                <button
+                  onClick={() => setAdminTab('orders')}
+                  className={`w-full text-left px-4 py-3.5 rounded-2xl font-bold text-sm transition-all flex items-center gap-3 ${adminTab === 'orders' ? 'bg-purple-50 text-purple-700 border-l-4 border-purple-600' : 'text-stone-600 hover:bg-stone-50'
+                    }`}
+                >
+                  <span>📦</span> จัดการคำสั่งซื้อ
+                  {orders.filter(o => o.paymentStatus === 'รอตรวจสอบ').length > 0 && (
+                    <span className="ml-auto bg-amber-500 text-white text-[10px] px-2.5 py-0.5 rounded-full font-bold animate-pulse">
+                      {orders.filter(o => o.paymentStatus === 'รอตรวจสอบ').length}
+                    </span>
+                  )}
+                </button>
+
+                <button
+                  onClick={() => setAdminTab('members')}
+                  className={`w-full text-left px-4 py-3.5 rounded-2xl font-bold text-sm transition-all flex items-center gap-3 ${adminTab === 'members' ? 'bg-purple-50 text-purple-700 border-l-4 border-purple-600' : 'text-stone-600 hover:bg-stone-50'
+                    }`}
+                >
+                  <span>👥</span> จัดการสมาชิก
+                </button>
+
+                <button
+                  onClick={() => setAdminTab('payments')}
+                  className={`w-full text-left px-4 py-3.5 rounded-2xl font-bold text-sm transition-all flex items-center gap-3 ${adminTab === 'payments' ? 'bg-purple-50 text-purple-700 border-l-4 border-purple-600' : 'text-stone-600 hover:bg-stone-50'
+                    }`}
+                >
+                  <span>💳</span> ช่องทางชำระเงิน & ยอดขาย
+                </button>
+              </div>
+
+              {/* Tab Contents */}
+              <div className="lg:col-span-3 bg-white rounded-3xl p-6 md:p-8 border border-stone-200/60 shadow-sm min-h-[500px]">
+
+                {/* 1. PRODUCTS TAB */}
+                {adminTab === 'products' && (
+                  <div className="space-y-6">
+                    <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+                      <div>
+                        <h3 className="text-xl font-bold text-stone-900">จัดการข้อมูลสินค้า</h3>
+                        <p className="text-sm text-stone-505 font-medium">เพิ่ม แก้ไข หรือลบรายการสินค้าในระบบร้านค้า</p>
+                      </div>
+                      <button
+                        onClick={() => {
+                          setEditingProduct(null);
+                          setProductForm({ name: '', price: 0, unit: 'กก.', image: '/images/black_grapes.png', category: 'ผลไม้สด' });
+                          setIsProductModalOpen(true);
+                        }}
+                        className="bg-purple-600 hover:bg-purple-700 text-white font-bold px-5 py-2.5 rounded-full text-sm shadow-md hover:shadow-lg transition-all flex items-center gap-2"
+                      >
+                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M12 4v16m8-8H4" /></svg>
+                        เพิ่มสินค้าใหม่
+                      </button>
+                    </div>
+
+                    <div className="overflow-x-auto rounded-2xl border border-stone-100">
+                      <table className="w-full text-left border-collapse text-sm">
+                        <thead>
+                          <tr className="bg-stone-50 text-stone-505 font-semibold border-b border-stone-100">
+                            <th className="p-4">รูปภาพ</th>
+                            <th className="p-4">ชื่อสินค้า</th>
+                            <th className="p-4">หมวดหมู่</th>
+                            <th className="p-4">ราคา</th>
+                            <th className="p-4">จัดการ</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-stone-100 font-medium text-stone-750">
+                          {products.map((product) => (
+                            <tr key={product.id} className="hover:bg-stone-50/50 transition-colors">
+                              <td className="p-4">
+                                <div className="relative w-12 h-12 rounded-xl overflow-hidden border border-stone-100 bg-stone-50">
+                                  <Image src={product.image} alt={product.name} fill className="object-cover" />
+                                </div>
+                              </td>
+                              <td className="p-4">
+                                <p className="font-bold text-stone-900">{product.name}</p>
+                                <p className="text-xs text-stone-500">รหัส: {product.id}</p>
+                              </td>
+                              <td className="p-4">
+                                <span className={`text-xs px-2.5 py-1 rounded-full font-bold border ${product.category === 'ผลไม้สด' ? 'bg-purple-50 text-purple-700 border-purple-200' : 'bg-amber-50 text-amber-700 border-amber-200'
+                                  }`}>
+                                  {product.category}
+                                </span>
+                              </td>
+                              <td className="p-4">
+                                <p className="text-stone-900 font-bold">{product.price} บาท</p>
+                                <p className="text-xs text-stone-505">ต่อ {product.unit}</p>
+                              </td>
+                              <td className="p-4">
+                                <div className="flex items-center gap-2">
+                                  <button
+                                    onClick={() => {
+                                      setEditingProduct(product);
+                                      setProductForm({ name: product.name, price: product.price, unit: product.unit, image: product.image, category: product.category });
+                                      setIsProductModalOpen(true);
+                                    }}
+                                    className="bg-stone-105 hover:bg-purple-50 hover:text-purple-700 p-2 rounded-xl text-stone-650 transition-colors"
+                                    title="แก้ไขข้อมูล"
+                                  >
+                                    ✏️
+                                  </button>
+                                  <button
+                                    onClick={() => {
+                                      if (confirm(`คุณแน่ใจว่าต้องการลบ ${product.name} ใช่หรือไม่?`)) {
+                                        setProducts(products.filter(p => p.id !== product.id));
+                                      }
+                                    }}
+                                    className="bg-stone-105 hover:bg-red-50 hover:text-red-705 p-2 rounded-xl text-stone-650 transition-colors"
+                                    title="ลบสินค้า"
+                                  >
+                                    🗑️
+                                  </button>
+                                </div>
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                )}
+
+                {/* 2. ORDERS TAB */}
+                {adminTab === 'orders' && (
+                  <div className="space-y-6">
+                    <div>
+                      <h3 className="text-xl font-bold text-stone-900">จัดการข้อมูลคำสั่งซื้อของลูกค้า</h3>
+                      <p className="text-sm text-stone-500 font-medium">ดูประวัติออเดอร์ ตรวจสอบการจ่ายเงิน และแก้ไขสถานะจัดส่ง</p>
+                    </div>
+
+                    <div className="overflow-x-auto rounded-2xl border border-stone-100">
+                      <table className="w-full text-left border-collapse text-sm">
+                        <thead>
+                          <tr className="bg-stone-50 text-stone-505 font-semibold border-b border-stone-100">
+                            <th className="p-4">รหัสออเดอร์</th>
+                            <th className="p-4">ลูกค้า</th>
+                            <th className="p-4">ยอดรวม</th>
+                            <th className="p-4">สถานะชำระเงิน</th>
+                            <th className="p-4">สถานะจัดส่ง</th>
+                            <th className="p-4">จัดการ</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-stone-100 font-medium text-stone-750">
+                          {orders.map((order) => (
+                            <tr key={order.id} className="hover:bg-stone-50/50 transition-colors">
+                              <td className="p-4 font-bold text-purple-700">{order.id}</td>
+                              <td className="p-4">
+                                <p className="font-bold text-stone-900">{order.username}</p>
+                                <p className="text-xs text-stone-450">{order.createdAt}</p>
+                              </td>
+                              <td className="p-4 font-bold text-stone-900">{order.totalPrice} บาท</td>
+                              <td className="p-4">
+                                <select
+                                  value={order.paymentStatus}
+                                  onChange={(e) => {
+                                    const nextStatus = e.target.value as any;
+                                    setOrders(orders.map(o => o.id === order.id ? { ...o, paymentStatus: nextStatus } : o));
+                                  }}
+                                  className={`text-xs font-bold rounded-full px-2.5 py-1.5 border focus:outline-none cursor-pointer ${order.paymentStatus === 'ชำระเงินแล้ว' ? 'bg-emerald-50 text-emerald-700 border-emerald-200' :
+                                    order.paymentStatus === 'รอตรวจสอบ' ? 'bg-amber-50 text-amber-700 border-amber-200 animate-pulse' :
+                                      'bg-red-50 text-red-700 border-red-200'
+                                    }`}
+                                >
+                                  <option value="รอตรวจสอบ">⏳ รอตรวจสอบ</option>
+                                  <option value="ชำระเงินแล้ว">✅ ชำระเงินแล้ว</option>
+                                  <option value="ล้มเหลว">❌ ล้มเหลว</option>
+                                </select>
+                              </td>
+                              <td className="p-4">
+                                <select
+                                  value={order.orderStatus}
+                                  onChange={(e) => {
+                                    const nextStatus = e.target.value as any;
+                                    setOrders(orders.map(o => o.id === order.id ? { ...o, orderStatus: nextStatus } : o));
+                                  }}
+                                  className={`text-xs font-bold rounded-full px-2.5 py-1.5 border focus:outline-none cursor-pointer ${order.orderStatus === 'ส่งสำเร็จ' ? 'bg-emerald-50 text-emerald-700 border-emerald-200' :
+                                    order.orderStatus === 'กำลังจัดส่ง' ? 'bg-blue-50 text-blue-700 border-blue-200' :
+                                      order.orderStatus === 'รอดำเนินการ' ? 'bg-stone-105 text-stone-650 border-stone-200' :
+                                        'bg-red-50 text-red-700 border-red-200'
+                                    }`}
+                                >
+                                  <option value="รอดำเนินการ">📦 รอดำเนินการ</option>
+                                  <option value="กำลังจัดส่ง">🚚 กำลังจัดส่ง</option>
+                                  <option value="ส่งสำเร็จ">🏁 ส่งสำเร็จ</option>
+                                  <option value="ยกเลิก">❌ ยกเลิก</option>
+                                </select>
+                              </td>
+                              <td className="p-4">
+                                <button
+                                  onClick={() => setSelectedOrder(order)}
+                                  className="bg-stone-105 hover:bg-stone-200 text-stone-700 text-xs font-bold px-3 py-1.5 rounded-xl transition-all"
+                                >
+                                  ดูรายละเอียด
+                                </button>
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                )}
+
+                {/* 3. MEMBERS TAB */}
+                {adminTab === 'members' && (
+                  <div className="space-y-6">
+                    <div>
+                      <h3 className="text-xl font-bold text-stone-900">จัดการข้อมูลสมาชิก</h3>
+                      <p className="text-sm text-stone-500 font-medium">ดูรายชื่อสมาชิก เปลี่ยนแปลงระดับสิทธิ์ผู้ใช้ หรือลบบัญชีสมาชิก</p>
+                    </div>
+
+                    <div className="overflow-x-auto rounded-2xl border border-stone-100">
+                      <table className="w-full text-left border-collapse text-sm">
+                        <thead>
+                          <tr className="bg-stone-50 text-stone-505 font-semibold border-b border-stone-100">
+                            <th className="p-4">ผู้ใช้งาน</th>
+                            <th className="p-4">อีเมล</th>
+                            <th className="p-4">ระดับสิทธิ์ (Role)</th>
+                            <th className="p-4">จัดการ</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-stone-100 font-medium text-stone-750">
+                          {users.map((user) => (
+                            <tr key={user.email} className="hover:bg-stone-50/50 transition-colors">
+                              <td className="p-4">
+                                <div className="flex items-center gap-3">
+                                  <div className="w-8 h-8 rounded-full bg-stone-105 text-stone-700 flex items-center justify-center font-bold text-sm">
+                                    {user.username.charAt(0)}
+                                  </div>
+                                  <span className="font-bold text-stone-900">{user.username}</span>
+                                </div>
+                              </td>
+                              <td className="p-4 text-stone-505">{user.email}</td>
+                              <td className="p-4">
+                                <select
+                                  value={user.role}
+                                  onChange={(e) => {
+                                    const nextRole = e.target.value as any;
+                                    setUsers(users.map(u => u.email === user.email ? { ...u, role: nextRole } : u));
+                                    if (currentUser?.email === user.email) {
+                                      setCurrentUser({ ...currentUser, role: nextRole });
+                                    }
+                                  }}
+                                  className="text-xs font-bold rounded-xl border border-stone-200 px-2 py-1 focus:outline-none cursor-pointer"
+                                >
+                                  <option value="Admin">🛠️ Admin</option>
+                                  <option value="Member">💎 Member</option>
+                                  <option value="User">👤 User</option>
+                                </select>
+                              </td>
+                              <td className="p-4">
+                                <button
+                                  onClick={() => {
+                                    if (currentUser?.email === user.email) {
+                                      alert('คุณไม่สามารถลบบัญชีตัวเองที่กำลังเข้าสู่ระบบอยู่ได้ครับ');
+                                      return;
+                                    }
+                                    if (confirm(`คุณแน่ใจว่าต้องการลบสมาชิก ${user.username} ใช่หรือไม่?`)) {
+                                      setUsers(users.filter(u => u.email !== user.email));
+                                    }
+                                  }}
+                                  className="bg-stone-105 hover:bg-red-50 hover:text-red-700 text-stone-600 font-bold px-3 py-1.5 rounded-xl transition-all text-xs"
+                                >
+                                  ลบสมาชิก
+                                </button>
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                )}
+
+                {/* 4. PAYMENTS TAB */}
+                {adminTab === 'payments' && (
+                  <div className="space-y-8">
+                    <div>
+                      <h3 className="text-xl font-bold text-stone-900">ช่องทางการชำระเงิน & ภาพรวมยอดขาย</h3>
+                      <p className="text-sm text-stone-500 font-medium">ภาพรวมการจำหน่ายสินค้าของร้านและการตรวจสอบอนุมัติการชำระเงิน</p>
+                    </div>
+
+                    {/* Sales Overview Cards */}
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-6">
+                      <div className="p-5 rounded-2xl bg-emerald-50 border border-emerald-100">
+                        <p className="text-xs font-bold text-emerald-800 uppercase tracking-wide">ยอดขายที่ยืนยันแล้ว</p>
+                        <p className="text-2xl font-extrabold text-emerald-955 mt-1">
+                          {orders.filter(o => o.paymentStatus === 'ชำระเงินแล้ว').reduce((sum, o) => sum + o.totalPrice, 0)} บาท
+                        </p>
+                        <p className="text-[10px] text-emerald-600 mt-0.5">จากคำสั่งซื้อที่ได้รับการชำระเงินแล้ว</p>
+                      </div>
+
+                      <div className="p-5 rounded-2xl bg-amber-50 border border-amber-100">
+                        <p className="text-xs font-bold text-amber-800 uppercase tracking-wide">ยอดขายรออนุมัติ</p>
+                        <p className="text-2xl font-extrabold text-amber-955 mt-1">
+                          {orders.filter(o => o.paymentStatus === 'รอตรวจสอบ').reduce((sum, o) => sum + o.totalPrice, 0)} บาท
+                        </p>
+                        <p className="text-[10px] text-amber-600 mt-0.5">อยู่ระหว่างรอการอนุมัติสลิปโอนเงิน</p>
+                      </div>
+
+                      <div className="p-5 rounded-2xl bg-purple-50 border border-purple-100">
+                        <p className="text-xs font-bold text-purple-800 uppercase tracking-wide">จำนวนคำสั่งซื้อทั้งหมด</p>
+                        <p className="text-2xl font-extrabold text-purple-955 mt-1">{orders.length} รายการ</p>
+                        <p className="text-[10px] text-purple-600 mt-0.5">คำสั่งซื้อในระบบทั้งหมด</p>
+                      </div>
+                    </div>
+
+                    {/* Pending Approvals Table */}
+                    <div className="space-y-4">
+                      <h4 className="font-bold text-stone-900 flex items-center gap-2">
+                        <span>⏳</span> ตรวจสอบการโอนเงินที่รอการอนุมัติ
+                      </h4>
+                      {orders.filter(o => o.paymentStatus === 'รอตรวจสอบ').length === 0 ? (
+                        <div className="p-6 text-center border border-dashed border-stone-200 rounded-2xl text-stone-500 font-medium">
+                          ไม่มีออเดอร์ที่ค้างตรวจสอบยอดชำระเงิน
+                        </div>
+                      ) : (
+                        <div className="overflow-x-auto rounded-2xl border border-stone-100">
+                          <table className="w-full text-left border-collapse text-sm">
+                            <thead>
+                              <tr className="bg-stone-50 text-stone-505 font-semibold border-b border-stone-100">
+                                <th className="p-4">รหัสออเดอร์</th>
+                                <th className="p-4">ผู้สั่งซื้อ</th>
+                                <th className="p-4">ช่องทาง</th>
+                                <th className="p-4 text-center">สลิปการโอน</th>
+                                <th className="p-4">ยอดเงิน</th>
+                                <th className="p-4">การจัดการอนุมัติ</th>
+                              </tr>
+                            </thead>
+                            <tbody className="divide-y divide-stone-100 font-medium text-stone-750">
+                              {orders.filter(o => o.paymentStatus === 'รอตรวจสอบ').map((order) => (
+                                <tr key={order.id} className="hover:bg-stone-50/50">
+                                  <td className="p-4 font-bold text-purple-700">{order.id}</td>
+                                  <td className="p-4 text-stone-900 font-bold">{order.username}</td>
+                                  <td className="p-4 text-stone-600">{order.paymentMethod}</td>
+                                  <td className="p-4 text-center">
+                                    {order.slipUrl ? (
+                                      <button
+                                        onClick={() => setViewingSlipUrl(order.slipUrl || null)}
+                                        className="inline-flex items-center gap-1.5 text-xs text-purple-750 hover:text-purple-900 font-bold bg-purple-50 px-2.5 py-1.5 rounded-xl border border-purple-200 hover:bg-purple-100 transition-all shadow-sm"
+                                        title="คลิกเพื่อดูสลิปภาพใหญ่"
+                                      >
+                                        🖼️ ดูสลิป
+                                      </button>
+                                    ) : (
+                                      <span className="text-stone-400 text-xs">ไม่ได้แนบสลิป</span>
+                                    )}
+                                  </td>
+                                  <td className="p-4 font-extrabold text-emerald-800">{order.totalPrice} บาท</td>
+                                  <td className="p-4">
+                                    <div className="flex items-center gap-2">
+                                      <button
+                                        onClick={() => {
+                                          setOrders(orders.map(o => o.id === order.id ? { ...o, paymentStatus: 'ชำระเงินแล้ว', orderStatus: 'กำลังจัดส่ง' } : o));
+                                        }}
+                                        className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold px-3 py-1.5 rounded-xl text-xs shadow-sm transition-all"
+                                      >
+                                        ✔️ อนุมัติสลิป
+                                      </button>
+                                      <button
+                                        onClick={() => {
+                                          setOrders(orders.map(o => o.id === order.id ? { ...o, paymentStatus: 'ล้มเหลว', orderStatus: 'ยกเลิก' } : o));
+                                        }}
+                                        className="bg-red-50 text-red-605 hover:bg-red-100 hover:text-red-755 font-bold px-3 py-1.5 rounded-xl text-xs transition-all border border-red-200"
+                                      >
+                                        ❌ ปฏิเสธ
+                                      </button>
+                                    </div>
+                                  </td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                )}
+
+              </div>
+            </div>
+          </div>
+
+          {/* PRODUCT ADD/EDIT MODAL */}
+          {isProductModalOpen && (
+            <div className="fixed inset-0 z-50 overflow-hidden flex items-center justify-center p-4 bg-stone-900/60 backdrop-blur-sm">
+              <div className="bg-white rounded-3xl max-w-md w-full p-6 shadow-2xl border border-stone-100 animate-in zoom-in-95 duration-200">
+                <div className="flex justify-between items-center mb-6">
+                  <h4 className="text-xl font-bold text-stone-900">
+                    {editingProduct ? '✏️ แก้ไขรายละเอียดสินค้า' : '✨ เพิ่มสินค้าใหม่'}
+                  </h4>
+                  <button onClick={() => setIsProductModalOpen(false)} className="text-stone-400 hover:text-stone-600">
+                    <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" /></svg>
+                  </button>
+                </div>
+
+                <form onSubmit={(e) => {
+                  e.preventDefault();
+                  if (editingProduct) {
+                    setProducts(products.map(p => p.id === editingProduct.id ? {
+                      ...p,
+                      name: productForm.name,
+                      price: Number(productForm.price),
+                      unit: productForm.unit,
+                      image: productForm.image,
+                      category: productForm.category
+                    } : p));
+                  } else {
+                    const newProduct = {
+                      id: `p${products.length + 1}`,
+                      name: productForm.name,
+                      price: Number(productForm.price),
+                      unit: productForm.unit,
+                      image: productForm.image || '/images/red_grapes.png',
+                      category: productForm.category,
+                    };
+                    setProducts([...products, newProduct]);
+                  }
+                  setIsProductModalOpen(false);
+                }} className="space-y-4">
+                  <div>
+                    <label className="block text-xs font-bold text-stone-505 uppercase mb-1">ชื่อสินค้า</label>
+                    <input
+                      type="text"
+                      required
+                      value={productForm.name}
+                      onChange={(e) => setProductForm({ ...productForm, name: e.target.value })}
+                      className="w-full bg-stone-50 border border-stone-250 rounded-xl px-4 py-2 text-sm focus:outline-none focus:border-purple-600 font-bold"
+                    />
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-xs font-bold text-stone-505 uppercase mb-1">ราคา (บาท)</label>
+                      <input
+                        type="number"
+                        required
+                        min="0"
+                        value={productForm.price}
+                        onChange={(e) => setProductForm({ ...productForm, price: Number(e.target.value) })}
+                        className="w-full bg-stone-50 border border-stone-250 rounded-xl px-4 py-2 text-sm focus:outline-none focus:border-purple-600 font-bold"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-bold text-stone-505 uppercase mb-1">หน่วยสินค้า</label>
+                      <input
+                        type="text"
+                        required
+                        value={productForm.unit}
+                        onChange={(e) => setProductForm({ ...productForm, unit: e.target.value })}
+                        className="w-full bg-stone-50 border border-stone-250 rounded-xl px-4 py-2 text-sm focus:outline-none focus:border-purple-600 font-bold"
+                      />
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-bold text-stone-505 uppercase mb-1">หมวดหมู่</label>
+                    <select
+                      value={productForm.category}
+                      onChange={(e) => setProductForm({ ...productForm, category: e.target.value })}
+                      className="w-full bg-stone-50 border border-stone-250 rounded-xl px-4 py-2 text-sm focus:outline-none focus:border-purple-600 font-bold"
+                    >
+                      <option value="ผลไม้สด">ผลไม้สด</option>
+                      <option value="ข้าวสาร">ข้าวสาร</option>
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-bold text-stone-505 uppercase mb-1">รูปภาพตัวเลือก</label>
+                    <select
+                      value={productForm.image}
+                      onChange={(e) => setProductForm({ ...productForm, image: e.target.value })}
+                      className="w-full bg-stone-50 border border-stone-250 rounded-xl px-4 py-2 text-sm focus:outline-none focus:border-purple-600 font-bold"
+                    >
+                      <option value="/images/black_grapes.png">องุ่นดำไร้เมล็ด</option>
+                      <option value="/images/red_grapes.png">องุ่นแดง</option>
+                      <option value="/images/jasmine_rice.png">ข้าวหอมมะลิ</option>
+                      <option value="/images/sticky_rice.png">ข้าวเหนียว</option>
+                    </select>
+                  </div>
+
+                  <div className="pt-4 flex gap-3">
+                    <button
+                      type="button"
+                      onClick={() => setIsProductModalOpen(false)}
+                      className="w-1/2 border border-stone-300 hover:bg-stone-50 text-stone-750 font-bold py-3 rounded-full text-sm transition-all"
+                    >
+                      ยกเลิ�      ) : (
+        <div className="flex-1 flex flex-col">
+          {/* 2. Hero Section */}
+          {activePage === 'home' && (
+            <section className="bg-[#f3f4ee] py-12 md:py-20 overflow-hidden animate-in fade-in duration-300">
+              <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-12 items-center">
+                  {/* Left Content */}
+                  <div className="space-y-6 text-center md:text-left">
+                    <h2 className="text-4xl sm:text-5xl lg:text-6xl font-extrabold tracking-tight leading-tight">
+                      <span className="text-[#166534] block mb-2 drop-shadow-sm">สดใหม่จากสวน</span>
+                      <span className="text-[#7e22ce] block drop-shadow-sm">ส่งตรงถึงบ้านคุณ</span>
+                    </h2>
+                    <div className="space-y-3 text-lg text-stone-600 font-medium max-w-lg mx-auto md:mx-0">
+                      <div className="flex items-center justify-center md:justify-start gap-2.5">
+                        <span className="w-2.5 h-2.5 rounded-full bg-emerald-600"></span>
+                        <p>องุ่นหวาน อร่อย ปลอดสารพิษ</p>
+                      </div>
+                      <div className="flex items-center justify-center md:justify-start gap-2.5">
+                        <span className="w-2.5 h-2.5 rounded-full bg-purple-600"></span>
+                        <p>ข้าวสารหอม นุ่ม คุณภาพดี</p>
+                      </div>
+                    </div>
+
+                    <div className="pt-4 flex flex-col sm:flex-row justify-center md:justify-start gap-4">
+                      <a
+                        href="#"
+                        onClick={(e) => { e.preventDefault(); setActivePage('products'); setSelectedCategory(null); }}
+                        className="bg-[#7e22ce] hover:bg-[#6b21a8] text-white text-lg font-semibold px-8 py-4 rounded-full flex items-center justify-center gap-2.5 shadow-lg hover:shadow-xl transition-all transform hover:-translate-y-0.5 duration-200"
+                      >
+                        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M3 3h2l.4 2M7 13h10l4-8H5.4M7 13L5.4 5M7 13l-2.293 2.293c-.63.63-.184 1.707.707 1.707H17m0 0a2 2 0 100 4 2 2 0 000-4zm-8 2a2 2 0 11-4 0 2 2 0 014 0z" />
+                        </svg>
+                        สั่งซื้อเลย
+                      </a>
+                    </div>
+                  </div>
+
+                  {/* Right Image */}
+                  <div className="relative mx-auto md:mr-0 w-full max-w-md md:max-w-xl aspect-[4/3] rounded-3xl overflow-hidden shadow-2xl border-4 border-white bg-stone-100 transform hover:scale-[1.01] transition-transform duration-300">
+                    <Image
+                      src="/images/hero_banner.png"
+                      alt="Grapes and Jasmine Rice from our family garden"
+                      fill
+                      priority
+                      className="object-cover"
+                      sizes="(max-w-768px) 100vw, 50vw"
+                    />
+                  </div>
+                </div>
+              </div>
+            </section>
+          )}
+
+          {/* 3. Value Propositions (Highlights) */}
+          {activePage === 'home' && (
+            <section className="py-12 bg-white border-b border-stone-100 animate-in fade-in duration-300">
+              <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
+                  {/* Feature 1 */}
+                  <div className="flex items-start gap-4 p-6 rounded-2xl bg-emerald-50/50 border border-emerald-100/50 hover:shadow-md transition-shadow">
+                    <div className="bg-emerald-600/10 p-3.5 rounded-2xl text-emerald-800">
+                      <svg className="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364-6.364l-.707.707M6.343 17.657l-.707.707m0-12.728l.707.707m12.728 12.728l.707-.707M12 8a4 4 0 100 8 4 4 0 000-8z" />
+                      </svg>
+                    </div>
+                    <div>
+                      <h4 className="text-lg font-bold text-stone-900">สดใหม่ ปลอดสาร</h4>
+                      <p className="text-sm text-stone-600 mt-1 font-medium">ปลูกด้วยความใส่ใจ</p>
+                    </div>
+                  </div>
+
+                  {/* Feature 2 */}
+                  <div className="flex items-start gap-4 p-6 rounded-2xl bg-emerald-50/50 border border-emerald-100/50 hover:shadow-md transition-shadow">
+                    <div className="bg-emerald-600/10 p-3.5 rounded-2xl text-emerald-800">
+                      <svg className="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 17a2 2 0 11-4 0 2 2 0 014 0zM19 17a2 2 0 11-4 0 2 2 0 014 0z" />
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13 16V6a1 1 0 00-1-1H4a1 1 0 00-1 1v10a1 1 0 001 1h1m8-1a1 1 0 01-1 1H9m4-1V8a1 1 0 011-1h2.586a1 1 0 01.707.293l3.414 3.414a1 1 0 01.293.707V16a1 1 0 01-1 1h-1m-6-1a1 1 0 001 1h1M5 17a2 2 0 104 0m-4 0a2 2 0 114 0m6 0a2 2 0 104 0m-4 0a2 2 0 114 0" />
+                      </svg>
+                    </div>
+                    <div>
+                      <h4 className="text-lg font-bold text-stone-900">จัดส่งรวดเร็ว</h4>
+                      <p className="text-sm text-stone-600 mt-1 font-medium">ถึงมือคุณอย่างปลอดภัย</p>
+                    </div>
+                  </div>
+
+                  {/* Feature 3 */}
+                  <div className="flex items-start gap-4 p-6 rounded-2xl bg-emerald-50/50 border border-emerald-100/50 hover:shadow-md transition-shadow">
+                    <div className="bg-emerald-600/10 p-3.5 rounded-2xl text-emerald-800">
+                      <svg className="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z" />
+                      </svg>
+                    </div>
+                    <div>
+                      <h4 className="text-lg font-bold text-stone-900">คุณภาพดี</h4>
+                      <p className="text-sm text-stone-600 mt-1 font-medium">คัดสรรสินค้าพิเศษ</p>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </section>
+          )}
+
+          {/* 4. Best Sellers Section */}
+          {activePage === 'products' && (
+            <section id="products-section" className="py-16 md:py-24 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex-1 animate-in fade-in duration-300">
+              {selectedCategory === null ? (
+                <div>
+                  <div className="text-center space-y-4 mb-16">
+                    <h3 className="text-3xl font-extrabold text-stone-900 relative inline-block pb-3">
+                      หมวดหมู่สินค้า
+                      <span className="absolute bottom-0 left-1/2 -translate-x-1/2 w-16 h-1 bg-[#166534] rounded-full"></span>
+                    </h3>
+                    <p className="text-stone-505 text-base max-w-md mx-auto">
+                      เลือกชมสินค้าคุณภาพจากสวนที่เราตั้งใจคัดสรรเพื่อคุณและครอบครัว
+                    </p>
+                  </div>
+
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-8 max-w-4xl mx-auto">
+                    {categories.map((category) => (
+                      <button
+                        key={category.id}
+                        onClick={() => {
+                          setSelectedCategory(category.name);
+                          // Smooth scroll to the products section header to give good feedback
+                          document.getElementById('products-section')?.scrollIntoView({ behavior: 'smooth' });
+                        }}
+                        className={`group relative text-left bg-gradient-to-br ${category.gradient} border border-stone-200/60 rounded-3xl overflow-hidden shadow-sm md:hover:shadow-xl transition-all duration-300 md:transform md:hover:-translate-y-1.5 focus:outline-none flex flex-col h-[380px] w-full touch-manipulation`}
+                      >
+                        {/* Category Image container */}
+                        <div className="relative w-full h-[60%] overflow-hidden bg-stone-100">
+                          <Image
+                            src={category.image}
+                            alt={category.name}
+                            fill
+                            className="object-cover md:group-hover:scale-105 transition-transform duration-500"
+                          />
+                          <div className="absolute inset-0 bg-gradient-to-t from-black/40 via-transparent to-transparent" />
+                          <span className={`absolute top-4 left-4 border ${category.badgeColor} text-xs font-bold px-3 py-1.5 rounded-full shadow-sm`}>
+                            {category.count} รายการ
+                          </span>
+                        </div>
+
+                        {/* Category Content */}
+                        <div className="p-6 flex-1 flex flex-col justify-between bg-white/85 backdrop-blur-sm">
+                          <div>
+                            <h4 className="text-2xl font-extrabold text-stone-905 group-hover:text-emerald-800 transition-colors flex items-center gap-2">
+                              {category.name}
+                              <svg className="w-5 h-5 opacity-0 group-hover:opacity-100 group-hover:translate-x-1.5 transition-all duration-300 text-emerald-700" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M14 5l7 7m0 0l-7 7m7-7H3" />
+                              </svg>
+                            </h4>
+                            <p className="text-stone-605 text-sm mt-2 leading-relaxed line-clamp-2">
+                              {category.description}
+                            </p>
+                          </div>
+
+                          <div className="text-emerald-700 text-sm font-semibold flex items-center gap-1.5 mt-4">
+                            เลือกดูสินค้าหมวดหมู่นี้
+                            <span className="group-hover:translate-x-1 transition-transform">→</span>
+                          </div>
+                        </div>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              ) : (
+                <div>
+                  {/* Header and Back Button */}
+                  <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-12 pb-6 border-b border-stone-100">
+                    <div className="flex items-center gap-3">
+                      <button
+                        onClick={() => setSelectedCategory(null)}
+                        className="bg-white border border-stone-200 text-stone-605 hover:border-emerald-600 hover:text-emerald-700 p-3 rounded-full shadow-sm hover:shadow-md transition-all duration-200 flex items-center justify-center focus:outline-none"
+                        title="ย้อนกลับไปหน้าหมวดหมู่"
+                      >
+                        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M15 19l-7-7 7-7" />
+                        </svg>
+                      </button>
+                      <div>
+                        <div className="text-xs text-stone-500 font-medium">หมวดหมู่สินค้า</div>
+                        <h3 className="text-3xl font-extrabold text-stone-900">
+                          {selectedCategory}
+                        </h3>
+                      </div>
+                    </div>
+
+                    <button
+                      onClick={() => setSelectedCategory(null)}
+                      className="text-stone-505 hover:text-emerald-700 text-sm font-semibold flex items-center gap-1.5 transition-colors self-start sm:self-auto"
+                    >
+                      ← ย้อนกลับไปหมวดหมู่ทั้งหมด
+                    </button>
+                  </div>
+
+                  {/* Product Grid */}
+                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-8">
+                    {products
+                      .filter((product) => product.category === selectedCategory)
+                      .map((product) => {
+                        const qty = cart[product.id] || 0;
+                        return (
+                          <div
+                            key={product.id}
+                            className="group bg-white rounded-3xl overflow-hidden border border-stone-100 md:hover:border-emerald-200/60 shadow-sm md:hover:shadow-xl transition-all duration-300 flex flex-col md:transform md:hover:-translate-y-1.5"
+                          >
+                            {/* Product Image */}
+                            <div className="relative w-full aspect-square bg-stone-50 overflow-hidden">
+                              <Image
+                                src={product.image}
+                                alt={product.name}
+                                fill
+                                className="object-cover md:group-hover:scale-105 transition-transform duration-300"
+                                sizes="(max-w-768px) 100vw, 25vw"
+                              />
+                              <span className="absolute top-4 left-4 bg-emerald-600 text-white text-xs font-bold px-3 py-1.5 rounded-full shadow-sm">
+                                {product.category}
+                              </span>
+                            </div>
+
+                            {/* Product Info */}
+                            <div className="p-6 flex flex-col flex-1 justify-between space-y-4">
+                              <div>
+                                <h4 className="text-xl font-bold text-stone-900 group-hover:text-emerald-800 transition-colors">
+                                  {product.name}
+                                </h4>
+                                <p className="text-[#166534] text-lg font-extrabold mt-2">
+                                  {product.price} <span className="text-sm font-medium text-stone-500">บาท/{product.unit}</span>
+                                </p>
+                              </div>
+
+                              {/* Add to Cart Actions */}
+                              <div className="pt-2">
+                                {(!currentUser || currentUser.role === 'User') ? (
+                                  <button
+                                    onClick={() => {
+                                      alert('กรุณาเข้าสู่ระบบหรือสมัครสมาชิกเพื่อสั่งซื้อสินค้าครับ');
+                                      setIsUserDropdownOpen(true);
+                                    }}
+                                    className="w-full bg-stone-105 text-stone-605 hover:bg-stone-200 hover:text-stone-700 font-semibold py-3 rounded-full flex items-center justify-center gap-2 transition-colors focus:outline-none touch-manipulation text-sm border border-stone-200"
+                                  >
+                                    🔒 เข้าสู่ระบบเพื่อสั่งซื้อ
+                                  </button>
+                                ) : qty > 0 ? (
+                                  <div className="flex items-center justify-between bg-emerald-50 rounded-full p-1.5 border border-emerald-100">
+                                    <button
+                                      onClick={() => removeFromCart(product.id)}
+                                      className="bg-white text-emerald-800 border border-emerald-200 w-8 h-8 rounded-full flex items-center justify-center font-bold hover:bg-emerald-600 hover:text-white transition-colors focus:outline-none touch-manipulation"
+                                    >
+                                      -
+                                    </button>
+                                    <span className="font-bold text-emerald-950 text-base">{qty} {product.unit}</span>
+                                    <button
+                                      onClick={() => addToCart(product.id)}
+                                      className="bg-white text-emerald-800 border border-emerald-200 w-8 h-8 rounded-full flex items-center justify-center font-bold hover:bg-emerald-600 hover:text-white transition-colors focus:outline-none touch-manipulation"
+                                    >
+                                      +
+                                    </button>
+                                  </div>
+                                ) : (
+                                  <button
+                                    onClick={() => addToCart(product.id)}
+                                    className="w-full bg-[#166534] hover:bg-emerald-800 text-white font-bold py-3 rounded-full flex items-center justify-center gap-2 transition-colors focus:outline-none text-sm shadow-md"
+                                  >
+                                    ใส่ตะกร้า
+                                  </button>
+                                )}
+                              </div>
+                            </div>
+                          </div>
+                        );
+                      })}
+                  </div>
+                </div>
+              )}
+            </section>
+          )}
+
+          {/* 5. วิธีสั่งซื้อสินค้า Section */}
+          {activePage === 'delivery' && (
+            <section id="delivery-section" className="py-16 bg-[#f3f4ee] border-b border-stone-150 flex-1 animate-in fade-in duration-300">
+              <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+                <div className="text-center space-y-4 mb-16">
+                  <h3 className="text-3xl font-extrabold text-stone-900 relative inline-block pb-3">
+                    ขั้นตอนการสั่งซื้อสินค้า
+                    <span className="absolute bottom-0 left-1/2 -translate-x-1/2 w-16 h-1 bg-[#166534] rounded-full"></span>
+                  </h3>
+                  <p className="text-stone-505 text-base max-w-md mx-auto">
+                    สั่งซื้อสินค้าจากสวนง่ายๆ เพียง 3 ขั้นตอน
+                  </p>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
+                  {/* Step 1 */}
+                  <div className="bg-white p-8 rounded-3xl border border-stone-200/60 shadow-sm text-center space-y-4">
+                    <div className="w-12 h-12 bg-emerald-100 text-emerald-800 rounded-full flex items-center justify-center font-extrabold text-lg mx-auto">
+                      1
+                    </div>
+                    <h4 className="text-lg font-bold text-stone-900">เลือกสินค้าใส่ตะกร้า</h4>
+                    <p className="text-sm text-stone-600 font-medium">เลือกชมผลไม้สด ข้าวสาร และกดเพิ่มใส่ตะกร้าตามจำนวนที่ต้องการ</p>
+                  </div>
+
+                  {/* Step 2 */}
+                  <div className="bg-white p-8 rounded-3xl border border-stone-200/60 shadow-sm text-center space-y-4">
+                    <div className="w-12 h-12 bg-emerald-100 text-emerald-800 rounded-full flex items-center justify-center font-extrabold text-lg mx-auto">
+                      2
+                    </div>
+                    <h4 className="text-lg font-bold text-stone-900">โอนเงินและแนบสลิป</h4>
+                    <p className="text-sm text-stone-600 font-medium">กรอกที่อยู่จัดส่ง เลือกช่องทางการชำระเงิน โอนเงินผ่านพร้อมเพย์/ธนาคาร และแนบหลักฐานการโอนเงิน</p>
+                  </div>
+
+                  {/* Step 3 */}
+                  <div className="bg-white p-8 rounded-3xl border border-stone-200/60 shadow-sm text-center space-y-4">
+                    <div className="w-12 h-12 bg-emerald-100 text-emerald-800 rounded-full flex items-center justify-center font-extrabold text-lg mx-auto">
+                      3
+                    </div>
+                    <h4 className="text-lg font-bold text-stone-900">รอรับสินค้าที่บ้าน</h4>
+                    <p className="text-sm text-stone-600 font-medium">แอดมินสวนตรวจสอบหลักฐานการชำระเงินและทำการจัดส่ง สดใหม่ถึงหน้าบ้านคุณ</p>
+                  </div>
+                </div>
+
+                {/* Redirect Button */}
+                <div className="mt-12 text-center">
+                  <button
+                    onClick={() => {
+                      setActivePage('products');
+                      setSelectedCategory(null);
+                    }}
+                    className="bg-[#166534] hover:bg-emerald-800 text-white font-bold px-8 py-4 rounded-full text-base shadow-lg hover:shadow-xl transition-all cursor-pointer inline-flex items-center gap-2"
+                  >
+                    🛒 ไปเลือกซื้อสินค้า
+                  </button>
+                </div>
+              </div>
+            </section>
+          )}
+
+          {/* 6. Footer Section */}
+          <footer id="contact-section" className="bg-stone-900 text-stone-400 py-12 border-t border-stone-850">
+            <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-8 mb-8">
+                <div className="space-y-4">
+                  <h4 className="text-white text-lg font-bold">สวนครอบครัว Maiv Zev</h4>
+                  <p className="text-sm font-light leading-relaxed">
+                    แหล่งรวบรวมสินค้าผลไม้สด และข้าวสารคุณภาพพรีเมียมจากเกษตรกรในครอบครัวของเรา ปลูกด้วยวิถีธรรมชาติ ปลอดสารพิษ ส่งตรงถึงบ้านคุณ
+                  </p>
+                </div>
+                <div>
+                  <h4 className="text-white text-lg font-bold mb-4">เมนูหลัก</h4>
+                  <ul className="space-y-2 text-sm font-medium">
+                    <li><a href="#" onClick={(e) => { e.preventDefault(); setActivePage('home'); setSelectedCategory(null); }} className="hover:text-emerald-400 transition-colors">หน้าแรก</a></li>
+                    <li><a href="#" onClick={(e) => { e.preventDefault(); setActivePage('products'); setSelectedCategory(null); }} className="hover:text-emerald-400 transition-colors">สินค้าทั้งหมด</a></li>
+                    <li><a href="#" onClick={(e) => { e.preventDefault(); setActivePage('delivery'); }} className="hover:text-emerald-400 transition-colors">วิธีสั่งซื้อ</a></li>
+                  </ul>
+                </div>
+                <div>
+                  <h4 className="text-white text-lg font-bold mb-4">ติดต่อเรา</h4>
+                  <ul className="space-y-2 text-sm font-medium">
+                    <li className="flex items-center gap-2">
+                      <svg className="w-4 h-4 text-emerald-500" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M3 5a2 2 0 012-2h3.28a1 1 0 01.94.725l.548 2.2a1 1 0 01-.321.988l-1.305.98a10.582 10.582 0 004.872 4.872l.98-1.305a1 1 0 01.988-.321l2.2.548a1 1 0 01.725.94V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z" />
+                      </svg>
+                      <span>089-123-4567</span>
+                    </li>
+                    <li className="flex items-center gap-2">
+                      <svg className="w-4 h-4 text-emerald-500" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
+                      </svg>
+                      <span>contact@maivzev.com</span>
+                    </li>
+                  </ul>
+                </div>
+              </div>
+              <div className="border-t border-stone-800 pt-8 text-center text-xs text-stone-505 font-medium">
+                <p>&copy; {new Date().getFullYear()} สวนครอบครัว Maiv Zev. All rights reserved.</p>
+              </div>
+            </div>
+          </footer>
+        </div>   </div>
+                      );
+                    })}
+                </div>
+              </div>
+            )}
+          </section>
+
+          {/* 5. วิธีสั่งซื้อสินค้า Section */}
+          <section id="delivery-section" className="py-16 bg-[#f3f4ee] border-b border-stone-150">
+            <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+              <div className="text-center space-y-4 mb-16">
+                <h3 className="text-3xl font-extrabold text-stone-900 relative inline-block pb-3">
+                  ขั้นตอนการสั่งซื้อสินค้า
+                  <span className="absolute bottom-0 left-1/2 -translate-x-1/2 w-16 h-1 bg-[#166534] rounded-full"></span>
+                </h3>
+                <p className="text-stone-505 text-base max-w-md mx-auto">
+                  สั่งซื้อสินค้าจากสวนง่ายๆ เพียง 3 ขั้นตอน
+                </p>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
+                {/* Step 1 */}
+                <div className="bg-white p-8 rounded-3xl border border-stone-200/60 shadow-sm text-center space-y-4">
+                  <div className="w-12 h-12 bg-emerald-100 text-emerald-800 rounded-full flex items-center justify-center font-extrabold text-lg mx-auto">
+                    1
+                  </div>
+                  <h4 className="text-lg font-bold text-stone-900">เลือกสินค้าใส่ตะกร้า</h4>
+                  <p className="text-sm text-stone-600 font-medium">เลือกชมผลไม้สด ข้าวสาร และกดเพิ่มใส่ตะกร้าตามจำนวนที่ต้องการ</p>
+                </div>
+
+                {/* Step 2 */}
+                <div className="bg-white p-8 rounded-3xl border border-stone-200/60 shadow-sm text-center space-y-4">
+                  <div className="w-12 h-12 bg-emerald-100 text-emerald-800 rounded-full flex items-center justify-center font-extrabold text-lg mx-auto">
+                    2
+                  </div>
+                  <h4 className="text-lg font-bold text-stone-900">โอนเงินและแนบสลิป</h4>
+                  <p className="text-sm text-stone-600 font-medium">กรอกที่อยู่จัดส่ง เลือกช่องทางการชำระเงิน โอนเงินผ่านพร้อมเพย์/ธนาคาร และแนบหลักฐานการโอนเงิน</p>
+                </div>
+
+                {/* Step 3 */}
+                <div className="bg-white p-8 rounded-3xl border border-stone-200/60 shadow-sm text-center space-y-4">
+                  <div className="w-12 h-12 bg-emerald-100 text-emerald-800 rounded-full flex items-center justify-center font-extrabold text-lg mx-auto">
+                    3
+                  </div>
+                  <h4 className="text-lg font-bold text-stone-900">รอรับสินค้าที่บ้าน</h4>
+                  <p className="text-sm text-stone-600 font-medium">แอดมินสวนตรวจสอบหลักฐานการชำระเงินและทำการจัดส่ง สดใหม่ถึงหน้าบ้านคุณ</p>
+                </div>
+              </div>
+            </div>
+          </section>
+
+          {/* 6. Footer Section */}
+          <footer id="contact-section" className="bg-stone-900 text-stone-400 py-12 border-t border-stone-850">
+            <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-8 mb-8">
+                <div className="space-y-4">
+                  <h4 className="text-white text-lg font-bold">สวนครอบครัว Maiv Zev</h4>
+                  <p className="text-sm font-light leading-relaxed">
+                    แหล่งรวบรวมสินค้าผลไม้สด และข้าวสารคุณภาพพรีเมียมจากเกษตรกรในครอบครัวของเรา ปลูกด้วยวิถีธรรมชาติ ปลอดสารพิษ ส่งตรงถึงบ้านคุณ
+                  </p>
+                </div>
+                <div>
+                  <h4 className="text-white text-lg font-bold mb-4">เมนูหลัก</h4>
+                  <ul className="space-y-2 text-sm font-medium">
+                    <li><a href="#" onClick={() => setSelectedCategory(null)} className="hover:text-emerald-400 transition-colors">หน้าแรก</a></li>
+                    <li><a href="#products-section" onClick={() => setSelectedCategory(null)} className="hover:text-emerald-400 transition-colors">สินค้าทั้งหมด</a></li>
+                    <li><a href="#delivery-section" className="hover:text-emerald-400 transition-colors">วิธีสั่งซื้อ</a></li>
+                  </ul>
+                </div>
+                <div>
+                  <h4 className="text-white text-lg font-bold mb-4">ติดต่อเรา</h4>
+                  <ul className="space-y-2 text-sm font-medium">
+                    <li className="flex items-center gap-2">
+                      <svg className="w-4 h-4 text-emerald-500" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M3 5a2 2 0 012-2h3.28a1 1 0 01.94.725l.548 2.2a1 1 0 01-.321.988l-1.305.98a10.582 10.582 0 004.872 4.872l.98-1.305a1 1 0 01.988-.321l2.2.548a1 1 0 01.725.94V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z" />
+                      </svg>
+                      <span>089-123-4567</span>
+                    </li>
+                    <li className="flex items-center gap-2">
+                      <svg className="w-4 h-4 text-emerald-500" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
+                      </svg>
+                      <span>contact@maivzev.com</span>
+                    </li>
+                  </ul>
+                </div>
+              </div>
+              <div className="border-t border-stone-800 pt-8 text-center text-xs text-stone-505 font-medium">
+                <p>&copy; {new Date().getFullYear()} สวนครอบครัว Maiv Zev. All rights reserved.</p>
+              </div>
+            </div>
+          </footer>
+        </>
+      )}
+
+      {/* 6. Shopping Cart Drawer */}
+      {isCartOpen && (
+        <div className="fixed inset-0 z-50 overflow-hidden animate-in fade-in duration-200">
+          <div
+            className="absolute inset-0 bg-stone-900/60 backdrop-blur-sm transition-opacity"
+            onClick={() => setIsCartOpen(false)}
+          />
+          <div className="absolute inset-y-0 right-0 max-w-full flex pl-10">
+            <div className="w-screen max-w-md bg-white shadow-2xl border-l border-stone-100 flex flex-col h-full animate-in slide-in-from-right duration-300">
+
+              {/* Drawer Header */}
+              <div className="flex items-center justify-between px-6 py-6 border-b border-stone-100">
+                <h3 className="text-xl font-bold text-stone-900">
+                  {checkoutStep === 1 ? 'ตะกร้าสินค้าของคุณ' : 'กรอกที่อยู่และการชำระเงิน'}
+                </h3>
+                <div className="flex items-center gap-2">
+                  {checkoutStep === 2 && (
+                    <button
+                      onClick={() => setCheckoutStep(1)}
+                      className="text-stone-605 hover:text-emerald-700 font-bold text-xs flex items-center gap-1 bg-stone-105 hover:bg-emerald-50 px-3 py-1.5 rounded-full transition-all border border-stone-200"
+                    >
+                      ← แก้ไขตะกร้า
+                    </button>
+                  )}
+                  <button
+                    onClick={() => setIsCartOpen(false)}
+                    className="text-stone-400 hover:text-stone-600 focus:outline-none"
+                  >
+                    <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" />
+                    </svg>
+                  </button>
+                </div>
+              </div>
+
+              {/* Drawer Content */}
+              <div className="flex-1 overflow-y-auto px-6 py-4 space-y-4">
+                {totalItems === 0 ? (
+                  <div className="h-64 flex flex-col items-center justify-center text-stone-400 space-y-3">
+                    <svg className="w-16 h-16 stroke-current" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.5" d="M16 11V7a4 4 0 00-8 0v4M5 9h14l1 12H4L5 9z" />
+                    </svg>
+                    <p className="font-semibold text-lg">ไม่มีสินค้าในตะกร้า</p>
+                  </div>
+                ) : checkoutStep === 1 ? (
+                  // Step 1: Select products and see subtotal
+                  products
+                    .filter((p) => cart[p.id] > 0)
+                    .map((product) => (
+                      <div key={product.id} className="flex items-center gap-4 p-4 rounded-2xl border border-stone-100 bg-stone-50/50">
+                        {/* Checkbox for selecting items */}
+                        <div className="flex items-center">
+                          <input
+                            type="checkbox"
+                            checked={isItemSelected(product.id)}
+                            onChange={() => toggleItemSelection(product.id)}
+                            className="w-5 h-5 rounded border-stone-300 text-emerald-600 focus:ring-emerald-500 cursor-pointer accent-emerald-600"
+                          />
+                        </div>
+                        <div className="relative w-20 h-20 rounded-xl overflow-hidden bg-white border border-stone-100">
+                          <Image
+                            src={product.image}
+                            alt={product.name}
+                            fill
+                            className="object-cover"
+                          />
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <h4 className="font-bold text-stone-900 truncate">{product.name}</h4>
+                          <p className="text-sm text-stone-555 font-medium">{product.price} บาท/{product.unit}</p>
+                          <div className="flex items-center gap-3 mt-2">
+                            <button
+                              onClick={() => removeFromCart(product.id)}
+                              className="bg-white border border-stone-200 text-stone-605 w-6 h-6 rounded-full flex items-center justify-center font-bold text-xs touch-manipulation"
+                            >
+                              -
+                            </button>
+                            <span className="font-bold text-stone-800 text-sm">{cart[product.id]} {product.unit}</span>
+                            <button
+                              onClick={() => addToCart(product.id)}
+                              className="bg-white border border-stone-200 text-stone-650 w-6 h-6 rounded-full flex items-center justify-center font-bold text-xs touch-manipulation"
+                            >
+                              +
+                            </button>
+                          </div>
+                        </div>
+                        <div className="text-right">
+                          <p className="font-bold text-emerald-800">
+                            {product.price * cart[product.id]} บาท
+                          </p>
+                        </div>
+                      </div>
+                    ))
+                ) : (
+                  // Step 2: Fill address and payment details
+                  <div className="space-y-4 animate-in fade-in duration-300">
+                    {/* Selected Items Summary */}
+                    <div className="p-4 rounded-2xl border border-stone-150 bg-stone-50/50 space-y-2">
+                      <p className="text-xs font-bold text-stone-500 uppercase tracking-wide">📦 รายการสินค้าที่เลือก</p>
+                      <div className="divide-y divide-stone-100 max-h-40 overflow-y-auto pr-1">
+                        {products
+                          .filter(p => cart[p.id] > 0 && isItemSelected(p.id))
+                          .map(p => (
+                            <div key={p.id} className="flex justify-between py-1.5 text-xs font-bold text-stone-850">
+                              <span>{p.name} <span className="text-stone-400 font-medium ml-1">x {cart[p.id]} {p.unit}</span></span>
+                              <span>{p.price * cart[p.id]} บาท</span>
+                            </div>
+                          ))}
+                      </div>
+                    </div>
+
+                    {/* Shipping Address Inputs */}
+                    <div className="space-y-3 text-stone-855">
+                      <div>
+                        <label className="block text-xs font-bold text-stone-500 uppercase mb-1">📍 ที่อยู่จัดส่งสินค้า</label>
+                        <textarea
+                          required
+                          value={shippingAddress}
+                          onChange={(e) => setShippingAddress(e.target.value)}
+                          placeholder="กรุณากรอกที่อยู่ เช่น บ้านเลขที่ ถนน ตำบล อำเภอ จังหวัด รหัสไปรษณีย์..."
+                          className="w-full p-3 border border-stone-250 rounded-2xl text-xs focus:outline-none focus:border-emerald-600 bg-white font-bold text-stone-700"
+                          rows={2}
+                        />
+                      </div>
+
+                      <div>
+                        <label className="block text-xs font-bold text-stone-500 uppercase mb-1">💳 ช่องทางการชำระเงิน</label>
+                        <select
+                          value={paymentMethod}
+                          onChange={(e) => setPaymentMethod(e.target.value)}
+                          className="w-full p-3 border border-stone-250 rounded-2xl text-xs focus:outline-none focus:border-emerald-600 bg-white cursor-pointer font-bold text-stone-700"
+                        >
+                          <option value="พร้อมเพย์ (PromptPay)">พร้อมเพย์ (PromptPay) - แนะนำ</option>
+                          <option value="โอนเงินผ่านธนาคาร">โอนเงินผ่านธนาคาร</option>
+                        </select>
+                      </div>
+
+                      {/* Bank transfer / PromptPay Details */}
+                      <div className="p-3 bg-stone-50 rounded-2xl border border-stone-200 text-xs font-medium space-y-2">
+                        {paymentMethod === 'พร้อมเพย์ (PromptPay)' ? (
+                          <div className="flex flex-col items-center text-center space-y-2 py-1">
+                            <p className="font-bold text-stone-900">โอนผ่านพร้อมเพย์ (PromptPay)</p>
+                            <div className="bg-white p-2 rounded-xl border border-stone-200 shadow-sm flex items-center justify-center">
+                              <svg className="w-24 h-24 text-emerald-800 animate-in zoom-in-95 duration-200" viewBox="0 0 100 100" fill="currentColor">
+                                <rect x="5" y="5" width="90" height="90" rx="10" fill="#f8fafc" stroke="#166534" strokeWidth="2" />
+                                <rect x="20" y="20" width="10" height="10" fill="#0f172a" />
+                                <rect x="20" y="70" width="10" height="10" fill="#0f172a" />
+                                <rect x="70" y="20" width="10" height="10" fill="#0f172a" />
+                                <rect x="40" y="20" width="5" height="15" fill="#0f172a" />
+                                <rect x="50" y="25" width="10" height="5" fill="#0f172a" />
+                                <rect x="45" y="45" width="10" height="10" fill="#0f172a" />
+                                <rect x="20" y="45" width="15" height="5" fill="#0f172a" />
+                                <rect x="70" y="45" width="10" height="15" fill="#0f172a" />
+                                <rect x="40" y="65" width="20" height="15" fill="#0f172a" />
+                                <rect x="30" y="10" width="40" height="4" rx="2" fill="#166534" />
+                                <text x="50" y="90" textAnchor="middle" className="font-sans font-bold text-[8px] fill-[#166534]">PROMPTPAY QR</text>
+                              </svg>
+                            </div>
+                            <div>
+                              <p className="font-bold text-stone-850">เบอร์โทรศัพท์: <span className="text-[#166534]">089-123-4567</span></p>
+                              <p className="text-stone-505 text-[10px]">ชื่อบัญชี: สวนครอบครัว Maiv Zev (ยายมี)</p>
+                            </div>
+                          </div>
+                        ) : (
+                          <div className="space-y-1.5 text-center animate-in fade-in duration-200">
+                            <p className="font-bold text-stone-900">โอนเงินผ่านบัญชีธนาคาร</p>
+                            <div className="bg-white p-2.5 rounded-xl border border-stone-200 shadow-sm space-y-1">
+                              <p className="font-bold text-stone-850">ธนาคารกสิกรไทย (KBANK)</p>
+                              <p className="font-extrabold text-[#166534] text-sm">123-4-56789-0</p>
+                              <p className="text-stone-500 text-[10px]">ชื่อบัญชี: นางมี รักสวนไทย (ยายมี)</p>
+                            </div>
+                          </div>
+                        )}
+                      </div>
+
+                      {/* Slip Upload Zone */}
+                      <div>
+                        <label className="block text-xs font-bold text-stone-555 uppercase mb-1">📸 แนบสลิปการโอนเงิน (จำเป็นต้องระบุ)</label>
+                        {!slipPreview ? (
+                          <div className="relative group border-2 border-dashed border-stone-250 hover:border-emerald-500 rounded-2xl p-4 bg-white hover:bg-emerald-50/10 transition-all flex flex-col items-center justify-center cursor-pointer text-center">
+                            <input
+                              type="file"
+                              accept="image/*"
+                              onChange={handleSlipChange}
+                              className="absolute inset-0 opacity-0 cursor-pointer w-full h-full"
+                            />
+                            <svg className="w-8 h-8 text-stone-400 group-hover:text-emerald-600 transition-colors" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                            </svg>
+                            <p className="text-xs font-bold text-stone-700 mt-2">คลิกเพื่ออัปโหลดรูปสลิปการโอนเงิน</p>
+                            <p className="text-[10px] text-stone-450 mt-0.5">รองรับไฟล์รูปภาพ JPG, PNG</p>
+                          </div>
+                        ) : (
+                          <div className="relative border border-stone-200 rounded-2xl p-2.5 bg-white space-y-2 animate-in zoom-in-95 duration-200">
+                            <div className="relative aspect-[3/4] max-h-40 rounded-xl overflow-hidden bg-stone-50 border border-stone-100 flex items-center justify-center">
+                              <img
+                                src={slipPreview}
+                                alt="สลิปการชำระเงินพรีวิว"
+                                className="object-contain w-full h-full"
+                              />
+                            </div>
+                            <button
+                              type="button"
+                              onClick={() => setSlipPreview(null)}
+                              className="w-full text-center text-xs font-bold text-red-650 hover:text-red-700 bg-red-50 hover:bg-red-100 py-2 rounded-xl transition-all border border-red-100"
+                            >
+                              🗑️ ลบรูปภาพสลิปนี้
+                            </button>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {/* Drawer Footer */}
+              {totalItems > 0 && (
+                <div className="border-t border-stone-100 px-6 py-6 space-y-4 bg-stone-50/50">
+                  <div className="flex justify-between text-base font-bold text-stone-955">
+                    <p>ราคารวมทั้งหมด</p>
+                    <p className="text-xl text-emerald-800">{calculateTotalPrice()} บาท</p>
+                  </div>
+
+                  {checkoutStep === 1 ? (
+                    <button
+                      onClick={() => {
+                        const selectedItems = products.filter(p => cart[p.id] > 0 && isItemSelected(p.id));
+                        if (selectedItems.length === 0) {
+                          alert('กรุณาเลือกสินค้าอย่างน้อย 1 รายการก่อนทำการสั่งซื้อครับ');
+                          return;
+                        }
+                        setCheckoutStep(2);
+                      }}
+                      className="w-full bg-[#166534] hover:bg-emerald-800 text-white font-bold py-4 rounded-full shadow-lg hover:shadow-xl transition-all flex items-center justify-center gap-2 focus:outline-none text-base"
+                    >
+                      ดำเนินการสั่งซื้อสินค้า →
+                    </button>
+                  ) : (
+                    <button
+                      onClick={() => {
+                        if (!shippingAddress.trim()) {
+                          alert('กรุณากรอกที่อยู่จัดส่งสินค้าเพื่อทำการสั่งซื้อครับ');
+                          return;
+                        }
+                        if (!slipPreview) {
+                          alert('กรุณาแนบภาพสลิปหลักฐานการโอนเงินเพื่อชำระค่าสินค้าด้วยครับ');
+                          return;
+                        }
+
+                        const selectedItems = products.filter(p => cart[p.id] > 0 && isItemSelected(p.id));
+                        if (selectedItems.length === 0) {
+                          alert('ไม่มีสินค้าที่ถูกเลือกสำหรับคำสั่งซื้อนี้ครับ');
+                          return;
+                        }
+
+                        // Create the new order
+                        const newOrder: Order = {
+                          id: `ORD-00${orders.length + 1}`,
+                          username: currentUser?.username || 'สมาชิก',
+                          items: selectedItems.map(p => ({
+                            productName: p.name,
+                            quantity: cart[p.id],
+                            price: p.price,
+                            unit: p.unit
+                          })),
+                          totalPrice: calculateTotalPrice(),
+                          paymentMethod: paymentMethod,
+                          paymentStatus: 'รอตรวจสอบ',
+                          orderStatus: 'รอดำเนินการ',
+                          createdAt: new Date().toISOString().replace('T', ' ').substring(0, 16),
+                          slipUrl: slipPreview
+                        };
+
+                        setOrders([newOrder, ...orders]);
+
+                        // Remove only selected items from the cart
+                        setCart(prev => {
+                          const nextCart = { ...prev };
+                          selectedItems.forEach(p => {
+                            delete nextCart[p.id];
+                          });
+                          return nextCart;
+                        });
+
+                        // Clear selection state for ordered items
+                        setSelectedCartItems(prev => {
+                          const nextSelected = { ...prev };
+                          selectedItems.forEach(p => {
+                            delete nextSelected[p.id];
+                          });
+                          return nextSelected;
+                        });
+
+                        setShippingAddress('');
+                        setSlipPreview(null);
+                        setIsCartOpen(false);
+                        setCheckoutStep(1); // Reset step back to 1
+                        alert(`🎉 สั่งซื้อสินค้าสำเร็จ!\nรหัสคำสั่งซื้อของคุณคือ: ${newOrder.id}\n(แอดมินได้รับการแจ้งเตือนสลิปโอนเงินของคุณแล้ว และกำลังทำการตรวจสอบความถูกต้องในระบบดูแลระบบครับ)`);
+                      }}
+                      className="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-4 rounded-full shadow-lg hover:shadow-xl transition-all flex items-center justify-center gap-2 focus:outline-none text-base"
+                    >
+                      ยืนยันการสั่งซื้อสินค้า
+                    </button>
+                  )}
+                </div>
+              )}
+
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 7. Member Order History Modal */}
+      {isOrderHistoryOpen && (
+        <div className="fixed inset-0 z-50 overflow-hidden flex items-center justify-center p-4 bg-stone-900/60 backdrop-blur-sm">
+          <div className="bg-white rounded-3xl max-w-2xl w-full p-6 shadow-2xl border border-stone-100 animate-in zoom-in-95 duration-200 flex flex-col max-h-[90vh]">
+            <div className="flex justify-between items-center mb-6 border-b border-stone-100 pb-3">
+              <div>
+                <h4 className="text-xl font-bold text-stone-900 flex items-center gap-2">
+                  <span>📦</span> ประวัติการสั่งซื้อของคุณ
+                </h4>
+                <p className="text-xs text-stone-505 font-medium text-stone-500">ตรวจสอบสถานะการชำระเงินและสถานะจัดส่งสินค้าของคุณ</p>
+              </div>
+              <button
+                onClick={() => setIsOrderHistoryOpen(false)}
+                className="text-stone-400 hover:text-stone-600 focus:outline-none"
+              >
+                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" /></svg>
+              </button>
+            </div>
+
+            <div className="flex-1 overflow-y-auto space-y-4 pr-1">
+              {orders.filter(o => o.username === currentUser?.username).length === 0 ? (
+                <div className="text-center py-12 text-stone-400 font-semibold space-y-2">
+                  <span className="text-4xl block">📭</span>
+                  <p>คุณยังไม่มีประวัติการสั่งซื้อในขณะนี้</p>
+                </div>
+              ) : (
+                orders
+                  .filter(o => o.username === currentUser?.username)
+                  .map((order) => (
+                    <div key={order.id} className="p-5 rounded-2xl border border-stone-150 bg-stone-50/50 space-y-3">
+                      <div className="flex flex-col sm:flex-row justify-between sm:items-center gap-2 pb-3 border-b border-stone-150">
+                        <div>
+                          <span className="text-xs font-bold text-stone-400 uppercase tracking-wide">รหัสคำสั่งซื้อ</span>
+                          <p className="font-extrabold text-stone-900 text-sm sm:text-base">{order.id}</p>
+                          <span className="text-[10px] text-stone-500 font-semibold">สั่งเมื่อ: {order.createdAt}</span>
+                        </div>
+                        <div className="flex flex-wrap gap-2">
+                          <span className={`text-[10px] font-bold px-2.5 py-1 rounded-full border ${order.paymentStatus === 'ชำระเงินแล้ว' ? 'bg-emerald-50 text-emerald-700 border-emerald-200' :
+                            order.paymentStatus === 'รอตรวจสอบ' ? 'bg-amber-50 text-amber-700 border-amber-200' :
+                              'bg-red-50 text-red-700 border-red-200'
+                            }`}>
+                            💳 {order.paymentStatus}
+                          </span>
+                          <span className={`text-[10px] font-bold px-2.5 py-1 rounded-full border ${order.orderStatus === 'ส่งสำเร็จ' ? 'bg-emerald-50 text-emerald-700 border-emerald-200' :
+                            order.orderStatus === 'กำลังจัดส่ง' ? 'bg-blue-50 text-blue-700 border-blue-200' :
+                              order.orderStatus === 'รอดำเนินการ' ? 'bg-stone-105 text-stone-650 border-stone-200' :
+                                'bg-red-50 text-red-700 border-red-200'
+                            }`}>
+                            📦 {order.orderStatus}
+                          </span>
+                        </div>
+                      </div>
+
+                      {/* Items */}
+                      <div className="space-y-2">
+                        {order.items.map((item, index) => (
+                          <div key={index} className="flex justify-between text-xs font-bold text-stone-850">
+                            <span>
+                              {item.productName}
+                              <span className="text-stone-400 font-medium ml-1.5">x {item.quantity} {item.unit}</span>
+                            </span>
+                            <span>{item.price * item.quantity} บาท</span>
+                          </div>
+                        ))}
+                      </div>
+
+                      {/* Slip details for customer */}
+                      {order.slipUrl && (
+                        <div className="pt-2 flex items-center justify-between text-xs border-t border-stone-150 animate-in fade-in duration-200">
+                          <span className="text-stone-505 font-medium">สลิปหลักฐานการชำระเงิน:</span>
+                          <button
+                            onClick={() => setViewingSlipUrl(order.slipUrl || null)}
+                            className="inline-flex items-center gap-1 text-emerald-800 hover:text-emerald-955 font-bold bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 px-2.5 py-1.5 rounded-xl transition-all shadow-sm"
+                          >
+                            🖼️ ดูสลิปที่แนบ
+                          </button>
+                        </div>
+                      )}
+
+                      {/* Total */}
+                      <div className="pt-2 border-t border-dashed border-stone-200 flex justify-between items-center text-xs sm:text-sm font-bold">
+                        <span className="text-stone-500 font-medium">รวมยอดสุทธิ</span>
+                        <span className="text-emerald-800 font-extrabold text-sm sm:text-base">{order.totalPrice} บาท</span>
+                      </div>
+                    </div>
+                  ))
+              )}
+            </div>
+
+            <div className="pt-4 border-t border-stone-100 flex justify-end">
+              <button
+                onClick={() => setIsOrderHistoryOpen(false)}
+                className="bg-stone-900 hover:bg-stone-850 text-white font-bold px-6 py-2.5 rounded-full text-sm transition-all"
+              >
+                ปิดหน้าต่าง
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Lightbox / Full screen slip viewer */}
+      {viewingSlipUrl && (
+        <div
+          onClick={() => setViewingSlipUrl(null)}
+          className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-stone-955/80 backdrop-blur-md animate-in fade-in duration-200 cursor-zoom-out"
+        >
+          <div className="relative max-w-sm w-full max-h-[85vh] flex flex-col items-center justify-center" onClick={(e) => e.stopPropagation()}>
+            <button
+              onClick={() => setViewingSlipUrl(null)}
+              className="absolute -top-12 right-0 bg-white/10 hover:bg-white/20 text-white rounded-full p-2.5 transition-colors focus:outline-none"
+              title="ปิดหน้าต่าง"
+            >
+              <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            </button>
+            <div className="bg-white p-3 rounded-3xl shadow-2xl overflow-hidden border border-white/10 max-h-[75vh] flex items-center justify-center">
+              <img
+                src={viewingSlipUrl}
+                alt="สลิปการโอนเงินฉบับเต็ม"
+                className="object-contain max-h-[70vh] rounded-2xl"
+              />
+            </div>
+            <p className="text-white/85 text-xs mt-3 font-semibold bg-stone-900/60 px-4 py-1.5 rounded-full backdrop-blur-sm">คลิกพื้นที่ว่างหรือกดปุ่ม X เพื่อปิด</p>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
