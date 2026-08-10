@@ -336,42 +336,42 @@ export default function AdminPanel() {
 
           <div className="max-w-7xl mx-auto py-8 px-4 sm:px-6 lg:px-8">
             <div className="grid grid-cols-1 lg:grid-cols-4 gap-8">
-              {/* Sidebar Menu */}
-              <div className="bg-white rounded-3xl p-5 border border-stone-200/60 shadow-sm flex flex-col gap-2 h-fit">
-                <p className="text-xs font-bold text-stone-400 uppercase tracking-wider px-3 mb-2">เมนูหลัก</p>
+              {/* Left Side Menu */}
+              <div className="bg-white rounded-3xl p-3 sm:p-5 border border-stone-200/60 shadow-sm flex flex-row overflow-x-auto lg:flex-col gap-2 h-fit scrollbar-none">
+                <p className="hidden lg:block text-xs font-bold text-stone-400 uppercase tracking-wider px-3 mb-2">เมนูหลัก</p>
 
                 <button
                   onClick={() => setAdminTab('dashboard')}
-                  className={`w-full text-left px-4 py-3.5 rounded-2xl font-bold text-sm transition-all flex items-center gap-3 ${adminTab === 'dashboard' ? 'bg-purple-50 text-purple-700 border-l-4 border-purple-600' : 'text-stone-600 hover:bg-stone-50'
+                  className={`flex-shrink-0 lg:w-full text-left px-4 py-3 rounded-2xl font-bold text-xs sm:text-sm transition-all flex items-center gap-2.5 ${adminTab === 'dashboard' ? 'bg-purple-50 text-purple-700 border-l-4 border-purple-600 shadow-sm' : 'text-stone-600 hover:bg-stone-50'
                     }`}
                 >
-                  <span>📊</span> หน้าหลัก Dashboard
+                  <span>📊</span> Dashboard
                 </button>
 
                 <button
                   onClick={() => setAdminTab('products')}
-                  className={`w-full text-left px-4 py-3.5 rounded-2xl font-bold text-sm transition-all flex items-center gap-3 ${adminTab === 'products' ? 'bg-purple-50 text-purple-700 border-l-4 border-purple-600' : 'text-stone-600 hover:bg-stone-50'
+                  className={`flex-shrink-0 lg:w-full text-left px-4 py-3 rounded-2xl font-bold text-xs sm:text-sm transition-all flex items-center gap-2.5 ${adminTab === 'products' ? 'bg-purple-50 text-purple-700 border-l-4 border-purple-600 shadow-sm' : 'text-stone-600 hover:bg-stone-50'
                     }`}
                 >
-                  <span>🏷️</span> จัดการข้อมูลสินค้า
+                  <span>🏷️</span> สินค้า
                 </button>
 
                 <button
                   onClick={() => setAdminTab('categories')}
-                  className={`w-full text-left px-4 py-3.5 rounded-2xl font-bold text-sm transition-all flex items-center gap-3 ${adminTab === 'categories' ? 'bg-purple-50 text-purple-700 border-l-4 border-purple-600' : 'text-stone-600 hover:bg-stone-50'
+                  className={`flex-shrink-0 lg:w-full text-left px-4 py-3 rounded-2xl font-bold text-xs sm:text-sm transition-all flex items-center gap-2.5 ${adminTab === 'categories' ? 'bg-purple-50 text-purple-700 border-l-4 border-purple-600 shadow-sm' : 'text-stone-600 hover:bg-stone-50'
                     }`}
                 >
-                  <span>📁</span> จัดการประเภทสินค้า
+                  <span>📁</span> หมวดหมู่
                 </button>
 
                 <button
                   onClick={() => setAdminTab('orders')}
-                  className={`w-full text-left px-4 py-3.5 rounded-2xl font-bold text-sm transition-all flex items-center gap-3 ${adminTab === 'orders' ? 'bg-purple-50 text-purple-700 border-l-4 border-purple-600' : 'text-stone-600 hover:bg-stone-50'
+                  className={`flex-shrink-0 lg:w-full text-left px-4 py-3 rounded-2xl font-bold text-xs sm:text-sm transition-all flex items-center gap-2.5 ${adminTab === 'orders' ? 'bg-purple-50 text-purple-700 border-l-4 border-purple-600 shadow-sm' : 'text-stone-600 hover:bg-stone-50'
                     }`}
                 >
-                  <span>📦</span> จัดการคำสั่งซื้อ
+                  <span>📦</span> คำสั่งซื้อ
                   {orders.filter(o => o.paymentStatus === 'รอตรวจสอบ').length > 0 && (
-                    <span className="ml-auto bg-amber-500 text-white text-[10px] px-2.5 py-0.5 rounded-full font-bold animate-pulse">
+                    <span className="ml-auto bg-amber-500 text-white text-[10px] px-2 py-0.5 rounded-full font-bold animate-pulse">
                       {orders.filter(o => o.paymentStatus === 'รอตรวจสอบ').length}
                     </span>
                   )}
@@ -379,10 +379,10 @@ export default function AdminPanel() {
 
                 <button
                   onClick={() => setAdminTab('members')}
-                  className={`w-full text-left px-4 py-3.5 rounded-2xl font-bold text-sm transition-all flex items-center gap-3 ${adminTab === 'members' ? 'bg-purple-50 text-purple-700 border-l-4 border-purple-600' : 'text-stone-600 hover:bg-stone-50'
+                  className={`flex-shrink-0 lg:w-full text-left px-4 py-3 rounded-2xl font-bold text-xs sm:text-sm transition-all flex items-center gap-2.5 ${adminTab === 'members' ? 'bg-purple-50 text-purple-700 border-l-4 border-purple-600 shadow-sm' : 'text-stone-600 hover:bg-stone-50'
                     }`}
                 >
-                  <span>👥</span> จัดการสมาชิก
+                  <span>👥</span> สมาชิก
                 </button>
 
                 <button

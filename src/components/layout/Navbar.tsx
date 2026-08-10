@@ -16,6 +16,7 @@ export default function Navbar() {
   const { cart } = useCart();
   const [isUserDropdownOpen, setIsUserDropdownOpen] = useState(false);
   const [isLoginModalOpen, setIsLoginModalOpen] = useState(false);
+  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
 
   const cartItemsCount = cart.reduce((sum, item) => sum + item.quantity, 0);
@@ -236,9 +237,44 @@ export default function Navbar() {
                   )}
                 </Link>
               )}
+
+              {/* Mobile Menu Toggle Button */}
+              <button
+                onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
+                className="md:hidden p-2 text-white hover:bg-white/10 rounded-xl focus:outline-none transition-colors cursor-pointer"
+                aria-label="Toggle Mobile Menu"
+              >
+                {isMobileMenuOpen ? (
+                  <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                ) : (
+                  <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M4 6h16M4 12h16M4 18h16" />
+                  </svg>
+                )}
+              </button>
             </div>
           </div>
         </div>
+
+        {/* Mobile Navigation Drawer */}
+        {isMobileMenuOpen && (
+          <div className="md:hidden bg-[#15803d] border-t border-emerald-700 shadow-xl px-4 pt-2 pb-4 space-y-1.5 animate-in slide-in-from-top duration-200">
+            {navLinks.map((link) => (
+              <Link
+                key={link.href}
+                href={link.href}
+                onClick={() => setIsMobileMenuOpen(false)}
+                className={`block px-4 py-2.5 rounded-xl text-sm font-bold transition-colors ${
+                  pathname === link.href ? 'bg-emerald-950/40 text-white border border-emerald-500/30' : 'text-emerald-100 hover:bg-white/10'
+                }`}
+              >
+                {link.name}
+              </Link>
+            ))}
+          </div>
+        )}
       </header>
 
       {/* Login Modal Integration */}
