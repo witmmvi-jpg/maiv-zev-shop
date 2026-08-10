@@ -88,6 +88,33 @@ export default function AdminPanel() {
     loadData();
   };
 
+  const handleDeleteProduct = async (id: number) => {
+    try {
+      await deleteProduct(id);
+      loadData();
+    } catch (err) {
+      console.error('Error deleting product:', err);
+    }
+  };
+
+  const handleDeleteCategory = async (id: number) => {
+    try {
+      await deleteCategory(id);
+      loadData();
+    } catch (err) {
+      console.error('Error deleting category:', err);
+    }
+  };
+
+  const handleUpdateOrderStatus = async (id: string, data: { paymentStatus?: string; orderStatus?: string }) => {
+    try {
+      await updateOrderStatus(id, data);
+      loadData();
+    } catch (err) {
+      console.error('Error updating order status:', err);
+    }
+  };
+
   const handleImageUpload = async (file: File | undefined, onSuccess: (url: string) => void) => {
     if (!file) return;
     if (file.size > 20 * 1024 * 1024) {
