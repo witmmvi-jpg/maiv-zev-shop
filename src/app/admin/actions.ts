@@ -171,8 +171,62 @@ export async function getUsers() {
     id: u.user_id,
     username: u.username,
     email: u.email,
+    phone: u.phone || '',
     role: u.role,
+    profileImage: u.profile_image || '',
   }));
+}
+
+export async function createUser(data: {
+  username: string;
+  email: string;
+  password?: string;
+  phone?: string;
+  role?: string;
+  profileImage?: string;
+}) {
+  const existing = await prisma.user.findUnique({ where: { email: data.email } });
+  if (existing) {
+    throw new Error('อีเมลนี้ถูกใช้งานในระบบแล้ว');
+  }
+  const user = await prisma.user.create({
+    data: {
+      username: data.username,
+      email: data.email,
+      password: data.password || '123456',
+      phone: data.phone || null,
+      role: data.role || 'User',
+      profile_image: data.profileImage || null,
+    },
+  });
+  revalidatePath('/admin');
+  revalidatePath('/');
+  return { success: true, user };
+}
+
+export async function updateUser(id: number, data: {
+  username?: string;
+  email?: string;
+  password?: string;
+  phone?: string;
+  role?: string;
+  profileImage?: string;
+}) {
+  const updateData: any = {};
+  if (data.username !== undefined) updateData.username = data.username;
+  if (data.email !== undefined) updateData.email = data.email;
+  if (data.password) updateData.password = data.password;
+  if (data.phone !== undefined) updateData.phone = data.phone;
+  if (data.role !== undefined) updateData.role = data.role;
+  if (data.profileImage !== undefined) updateData.profile_image = data.profileImage;
+
+  await prisma.user.update({
+    where: { user_id: id },
+    data: updateData,
+  });
+  revalidatePath('/admin');
+  revalidatePath('/');
+  return { success: true };
 }
 
 export async function updateUserRole(id: number, role: string) {

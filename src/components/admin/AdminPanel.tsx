@@ -7,7 +7,7 @@ import React, { useState, useEffect } from 'react';
 import { useAuth } from '@/providers/AuthProvider';
 import { useRef } from 'react';
 import { Product, Order, UserProfile, Category, ProductReview, OrderItem } from '@/types';
-import { getDashboardStats, getProducts, createProduct, updateProduct, deleteProduct, getCategories, createCategory, updateCategory, deleteCategory, getOrders, updateOrderStatus, getUsers, updateUserRole, deleteUser } from '@/app/admin/actions';
+import { getDashboardStats, getProducts, createProduct, updateProduct, deleteProduct, getCategories, createCategory, updateCategory, deleteCategory, getOrders, updateOrderStatus, getUsers, updateUserRole, deleteUser, createUser, updateUser } from '@/app/admin/actions';
 import { uploadFile } from '@/app/actions';
 import { compressImage } from '@/lib/imageCompressor';
 
@@ -36,11 +36,46 @@ export default function AdminPanel() {
   const [editingCategory, setEditingCategory] = useState<any | null>(null);
   const [categoryForm, setCategoryForm] = useState<any>({});
   const [adminCategoryFilter, setAdminCategoryFilter] = useState<string>('ทั้งหมด');
-  
+
+  const [isUserModalOpen, setIsUserModalOpen] = useState(false);
+  const [editingUser, setEditingUser] = useState<any | null>(null);
+  const [userForm, setUserForm] = useState<any>({
+    username: '',
+    email: '',
+    password: '',
+    phone: '',
+    role: 'User',
+    profileImage: '',
+  });
+
   const [selectedOrder, setSelectedOrder] = useState<any | null>(null);
   const [selectedMemberOrders, setSelectedMemberOrders] = useState<any | null>(null);
   const [viewingSlipUrl, setViewingSlipUrl] = useState<string | null>(null);
   const adminChatEndRef = useRef<HTMLDivElement>(null);
+
+  const handleUserSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!userForm.username || !userForm.email) {
+      alert('กรุณากรอกชื่อผู้ใช้และอีเมลให้ครบถ้วนครับ');
+      return;
+    }
+    try {
+      if (editingUser) {
+        await updateUser(editingUser.id, userForm);
+        alert('อัปเดตข้อมูลสมาชิกสำเร็จแล้วครับ');
+      } else {
+        await createUser(userForm);
+        alert('เพิ่มสมาชิกใหม่สำเร็จแล้วครับ');
+      }
+      setIsUserModalOpen(false);
+      setEditingUser(null);
+      setUserForm({ username: '', email: '', password: '', phone: '', role: 'User', profileImage: '' });
+      loadData();
+    } catch (err: any) {
+      console.error('Error submitting user:', err);
+      alert(err.message || 'เกิดข้อผิดพลาดในการบันทึกข้อมูลสมาชิกครับ');
+    }
+  };
 
   const setCurrentUser = (u?: any) => {};
   
@@ -844,39 +879,63 @@ export default function AdminPanel() {
                 {/* 3. MEMBERS TAB */}
                 {adminTab === 'members' && (
                   <div className="space-y-6">
-                    <div>
-                      <h3 className="text-xl font-bold text-stone-900">จัดการข้อมูลสมาชิก</h3>
-                      <p className="text-sm text-stone-500 font-medium">ดูรายชื่อสมาชิก เปลี่ยนแปลงระดับสิทธิ์ผู้ใช้ หรือลบบัญชีสมาชิก</p>
+                    <div className="flex flex-col sm:flex-row justify-between sm:items-center gap-4">
+                      <div>
+                        <h3 className="text-xl font-bold text-stone-900">จัดการข้อมูลสมาชิก</h3>
+                        <p className="text-xs text-stone-500 font-medium">ดูรายชื่อสมาชิก เพิ่มสมาชิกใหม่ แก้ไขข้อมูลสิทธิ์ อัปโหลดรูป หรือลบบัญชีสมาชิก</p>
+                      </div>
+
+                      <button
+                        onClick={() => {
+                          setEditingUser(null);
+                          setUserForm({ username: '', email: '', password: '', phone: '', role: 'User', profileImage: '' });
+                          setIsUserModalOpen(true);
+                        }}
+                        className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold px-4 py-2.5 rounded-2xl text-xs flex items-center gap-2 shadow-md shadow-emerald-600/20 transition-all hover:scale-[1.02] self-start sm:self-auto cursor-pointer"
+                      >
+                        ➕ เพิ่มสมาชิกใหม่
+                      </button>
                     </div>
 
-                    <div className="overflow-x-auto rounded-2xl border border-stone-100">
+                    <div className="overflow-x-auto rounded-2xl border border-stone-100 bg-white shadow-xs">
                       <table className="w-full text-left border-collapse text-sm">
                         <thead>
                           <tr className="bg-stone-50 text-stone-500 font-semibold border-b border-stone-100">
                             <th className="p-4">ผู้ใช้งาน</th>
                             <th className="p-4">อีเมล</th>
+                            <th className="p-4">เบอร์โทรศัพท์</th>
                             <th className="p-4">ระดับสิทธิ์ (Role)</th>
                             <th className="p-4">จัดการ</th>
                           </tr>
                         </thead>
                         <tbody className="divide-y divide-stone-100 font-medium text-stone-700">
                           {users.map((user) => (
-                            <tr key={user.email} className="hover:bg-stone-50/50 transition-colors">
+                            <tr key={user.email || user.id} className="hover:bg-stone-50/50 transition-colors">
                               <td className="p-4">
                                 <div className="flex items-center gap-3">
                                   {user.profileImage ? (
-                                    <div className="w-8 h-8 rounded-full overflow-hidden border border-stone-200 bg-stone-50">
-                                      <img src={user.profileImage} alt={user.username} className="w-full h-full object-cover" />
+                                    <div className="w-9 h-9 rounded-full overflow-hidden border border-stone-200 bg-stone-50 flex-shrink-0 flex items-center justify-center">
+                                      <img
+                                        src={user.profileImage}
+                                        alt={user.username}
+                                        className="w-full h-full object-cover"
+                                        onError={(e) => {
+                                          (e.target as HTMLElement).style.display = 'none';
+                                        }}
+                                      />
                                     </div>
                                   ) : (
-                                    <div className="w-8 h-8 rounded-full bg-stone-100 text-stone-700 flex items-center justify-center font-bold text-sm">
-                                      {user.username.charAt(0)}
+                                    <div className="w-9 h-9 rounded-full bg-emerald-100 text-emerald-800 flex items-center justify-center font-bold text-xs flex-shrink-0 border border-emerald-200">
+                                      {user.username.charAt(0).toUpperCase()}
                                     </div>
                                   )}
-                                  <span className="font-bold text-stone-900">{user.username}</span>
+                                  <div>
+                                    <span className="font-bold text-stone-900 block">{user.username}</span>
+                                  </div>
                                 </div>
                               </td>
-                              <td className="p-4 text-stone-500">{user.email}</td>
+                              <td className="p-4 text-stone-600 font-medium">{user.email}</td>
+                              <td className="p-4 text-stone-500 font-medium">{user.phone || '-'}</td>
                               <td className="p-4">
                                 <select
                                   value={user.role}
@@ -898,11 +957,30 @@ export default function AdminPanel() {
                               <td className="p-4">
                                 <div className="flex flex-wrap gap-2">
                                   <button
+                                    onClick={() => {
+                                      setEditingUser(user);
+                                      setUserForm({
+                                        username: user.username,
+                                        email: user.email,
+                                        password: '',
+                                        phone: user.phone || '',
+                                        role: user.role,
+                                        profileImage: user.profileImage || '',
+                                      });
+                                      setIsUserModalOpen(true);
+                                    }}
+                                    className="bg-emerald-50 hover:bg-emerald-100 text-emerald-700 font-bold px-3 py-1.5 rounded-xl transition-all text-xs border border-emerald-200 flex items-center gap-1 cursor-pointer"
+                                  >
+                                    ✏️ แก้ไข
+                                  </button>
+
+                                  <button
                                     onClick={() => setSelectedMemberOrders(user)}
-                                    className="bg-purple-50 hover:bg-purple-100 text-purple-750 font-bold px-3 py-1.5 rounded-xl transition-all text-xs border border-purple-200"
+                                    className="bg-purple-50 hover:bg-purple-100 text-purple-750 font-bold px-3 py-1.5 rounded-xl transition-all text-xs border border-purple-200 flex items-center gap-1 cursor-pointer"
                                   >
                                     📦 ประวัติสั่งซื้อ ({orders.filter(o => o.username === user.username).length})
                                   </button>
+
                                   <button
                                     onClick={() => {
                                       if (currentUser?.email === user.email) {
@@ -914,9 +992,9 @@ export default function AdminPanel() {
                                         handleDeleteUser(user.id);
                                       }
                                     }}
-                                    className="bg-stone-100 hover:bg-red-50 hover:text-red-750 text-stone-600 font-bold px-3 py-1.5 rounded-xl transition-all text-xs border border-stone-200"
+                                    className="bg-stone-100 hover:bg-red-50 hover:text-red-750 text-stone-600 font-bold px-3 py-1.5 rounded-xl transition-all text-xs border border-stone-200 flex items-center gap-1 cursor-pointer"
                                   >
-                                    ลบสมาชิก
+                                    🗑️ ลบ
                                   </button>
                                 </div>
                               </td>
@@ -1533,6 +1611,229 @@ export default function AdminPanel() {
                   >
                     ปิดหน้าต่าง
                   </button>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* 5. User Add / Edit Modal */}
+          {isUserModalOpen && (
+            <div className="fixed inset-0 z-50 overflow-hidden flex items-center justify-center p-4 bg-stone-900/60 backdrop-blur-sm animate-in fade-in duration-200">
+              <div className="bg-white rounded-3xl max-w-lg w-full p-6 shadow-2xl border border-stone-100 relative max-h-[90vh] flex flex-col">
+                <div className="flex justify-between items-center mb-4 pb-3 border-b border-stone-150">
+                  <h3 className="text-lg font-bold text-stone-900 flex items-center gap-2">
+                    <span>{editingUser ? '✏️' : '➕'}</span>
+                    {editingUser ? `แก้ไขข้อมูลสมาชิก: ${editingUser.username}` : 'เพิ่มสมาชิกใหม่'}
+                  </h3>
+                  <button
+                    onClick={() => {
+                      setIsUserModalOpen(false);
+                      setEditingUser(null);
+                    }}
+                    className="text-stone-400 hover:text-stone-600 font-bold text-lg cursor-pointer"
+                  >
+                    ✕
+                  </button>
+                </div>
+
+                <form onSubmit={handleUserSubmit} className="space-y-4 text-xs font-medium overflow-y-auto pr-1 flex-1">
+                  {/* Profile Image Field */}
+                  <div className="flex items-center gap-4 p-3 bg-stone-50 rounded-2xl border border-stone-200">
+                    <div className="w-16 h-16 rounded-full overflow-hidden border-2 border-emerald-500 bg-white flex-shrink-0 flex items-center justify-center">
+                      {userForm.profileImage ? (
+                        <img src={userForm.profileImage} alt="Profile" className="w-full h-full object-cover" />
+                      ) : (
+                        <span className="text-2xl font-bold text-emerald-600">
+                          {userForm.username ? userForm.username.charAt(0).toUpperCase() : '👤'}
+                        </span>
+                      )}
+                    </div>
+                    <div className="flex-1 space-y-1">
+                      <label className="block font-bold text-stone-800">📷 รูปโปรไฟล์ผู้ใช้งาน</label>
+                      <input
+                        type="file"
+                        accept="image/*"
+                        onChange={(e) => {
+                          const file = e.target.files?.[0];
+                          if (file) {
+                            handleImageUpload(file, (url) => setUserForm({ ...userForm, profileImage: url }));
+                          }
+                        }}
+                        className="text-xs text-stone-500 file:mr-2 file:py-1 file:px-3 file:rounded-xl file:border-0 file:text-xs file:font-bold file:bg-emerald-50 file:text-emerald-700 hover:file:bg-emerald-100 cursor-pointer"
+                      />
+                      <p className="text-[10px] text-stone-400">อัปโหลดรูปภาพโปรไฟล์สมาชิกใหม่ หรือเปลี่ยนรูปเดิม</p>
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="block font-bold text-stone-700 mb-1">ชื่อผู้ใช้งาน (Username) *</label>
+                    <input
+                      type="text"
+                      required
+                      value={userForm.username || ''}
+                      onChange={(e) => setUserForm({ ...userForm, username: e.target.value })}
+                      placeholder="เช่น somchai_123"
+                      className="w-full px-3.5 py-2.5 rounded-xl border border-stone-200 focus:outline-none focus:border-emerald-500 text-stone-900 font-semibold text-xs"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block font-bold text-stone-700 mb-1">อีเมล (Email) *</label>
+                    <input
+                      type="email"
+                      required
+                      value={userForm.email || ''}
+                      onChange={(e) => setUserForm({ ...userForm, email: e.target.value })}
+                      placeholder="เช่น user@example.com"
+                      className="w-full px-3.5 py-2.5 rounded-xl border border-stone-200 focus:outline-none focus:border-emerald-500 text-stone-900 font-semibold text-xs"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block font-bold text-stone-700 mb-1">
+                      รหัสผ่าน (Password) {editingUser && <span className="text-stone-400 font-normal">(เว้นว่างไว้หากไม่ต้องการเปลี่ยน)</span>}
+                    </label>
+                    <input
+                      type="password"
+                      required={!editingUser}
+                      value={userForm.password || ''}
+                      onChange={(e) => setUserForm({ ...userForm, password: e.target.value })}
+                      placeholder={editingUser ? '••••••••' : 'กรอกรหัสผ่าน'}
+                      className="w-full px-3.5 py-2.5 rounded-xl border border-stone-200 focus:outline-none focus:border-emerald-500 text-stone-900 font-semibold text-xs"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block font-bold text-stone-700 mb-1">เบอร์โทรศัพท์ (Phone)</label>
+                    <input
+                      type="text"
+                      value={userForm.phone || ''}
+                      onChange={(e) => setUserForm({ ...userForm, phone: e.target.value })}
+                      placeholder="เช่น 0812345678"
+                      className="w-full px-3.5 py-2.5 rounded-xl border border-stone-200 focus:outline-none focus:border-emerald-500 text-stone-900 font-semibold text-xs"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block font-bold text-stone-700 mb-1">ระดับสิทธิ์ (Role)</label>
+                    <select
+                      value={userForm.role || 'User'}
+                      onChange={(e) => setUserForm({ ...userForm, role: e.target.value })}
+                      className="w-full px-3.5 py-2.5 rounded-xl border border-stone-200 focus:outline-none focus:border-emerald-500 text-stone-900 font-bold bg-white text-xs cursor-pointer"
+                    >
+                      <option value="Admin">🛠️ Admin (ผู้ดูแลระบบ)</option>
+                      <option value="Member">💎 Member (สมาชิกพิเศษ)</option>
+                      <option value="User">👤 User (ผู้ใช้งานทั่วไป)</option>
+                    </select>
+                  </div>
+
+                  <div className="flex justify-end gap-2 pt-4 border-t border-stone-150">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setIsUserModalOpen(false);
+                        setEditingUser(null);
+                      }}
+                      className="px-4 py-2.5 rounded-xl bg-stone-100 hover:bg-stone-200 text-stone-700 font-bold text-xs transition-colors cursor-pointer"
+                    >
+                      ยกเลิก
+                    </button>
+                    <button
+                      type="submit"
+                      className="px-6 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs transition-colors shadow-md shadow-emerald-600/20 cursor-pointer"
+                    >
+                      {editingUser ? 'บันทึกการแก้ไข' : 'เพิ่มสมาชิกใหม่'}
+                    </button>
+                  </div>
+                </form>
+              </div>
+            </div>
+          )}
+
+          {/* 6. Member Order History Modal */}
+          {selectedMemberOrders && (
+            <div className="fixed inset-0 z-50 overflow-hidden flex items-center justify-center p-4 bg-stone-900/60 backdrop-blur-sm animate-in zoom-in-95 duration-200">
+              <div className="bg-white rounded-3xl max-w-2xl w-full p-6 shadow-2xl border border-stone-100 flex flex-col max-h-[90vh]">
+                <div className="flex justify-between items-center mb-4 pb-3 border-b border-stone-150">
+                  <div>
+                    <h4 className="text-lg font-bold text-stone-900 flex items-center gap-2">
+                      <span>📦</span> ประวัติการสั่งซื้อของ {selectedMemberOrders.username}
+                    </h4>
+                    <p className="text-xs text-stone-500">อีเมล: {selectedMemberOrders.email} | สิทธิ์: {selectedMemberOrders.role}</p>
+                  </div>
+                  <button
+                    onClick={() => setSelectedMemberOrders(null)}
+                    className="text-stone-400 hover:text-stone-600 font-bold text-lg cursor-pointer"
+                  >
+                    ✕
+                  </button>
+                </div>
+
+                <div className="flex-1 overflow-y-auto space-y-4 pr-1">
+                  {orders.filter(o => o.username === selectedMemberOrders.username).length === 0 ? (
+                    <div className="text-center py-12 text-stone-400 font-semibold space-y-2">
+                      <span className="text-4xl block">📭</span>
+                      <p className="text-stone-600 text-sm">สมาชิกคนนี้ยังไม่มีประวัติการสั่งซื้อในระบบ</p>
+                    </div>
+                  ) : (
+                    orders
+                      .filter(o => o.username === selectedMemberOrders.username)
+                      .map((order) => (
+                        <div key={order.id} className="p-4 rounded-2xl border border-stone-200 bg-stone-50/60 space-y-3">
+                          <div className="flex flex-col sm:flex-row justify-between sm:items-center gap-2 pb-2 border-b border-stone-200 text-xs">
+                            <div>
+                              <span className="font-extrabold text-stone-900 text-sm">คำสั่งซื้อ #{order.id}</span>
+                              <span className="block text-[10px] text-stone-500 font-medium">
+                                สั่งเมื่อ: {order.createdAt ? new Date(order.createdAt).toLocaleString('th-TH') : '-'}
+                              </span>
+                            </div>
+                            <div className="flex flex-wrap gap-1.5">
+                              <span className={`text-[10px] font-bold px-2.5 py-0.5 rounded-full border ${order.paymentStatus === 'ชำระเงินแล้ว' ? 'bg-emerald-50 text-emerald-700 border-emerald-200' :
+                                order.paymentStatus === 'รอตรวจสอบ' ? 'bg-amber-50 text-amber-700 border-amber-200' :
+                                  'bg-red-50 text-red-700 border-red-200'
+                                }`}>
+                                💳 {order.paymentStatus}
+                              </span>
+                              <span className={`text-[10px] font-bold px-2.5 py-0.5 rounded-full border ${order.orderStatus === 'ส่งสำเร็จ' ? 'bg-emerald-50 text-emerald-700 border-emerald-200' :
+                                order.orderStatus === 'กำลังจัดส่ง' ? 'bg-blue-50 text-blue-700 border-blue-200' :
+                                  order.orderStatus === 'รอดำเนินการ' ? 'bg-stone-100 text-stone-600 border-stone-200' :
+                                    'bg-red-50 text-red-700 border-red-200'
+                                }`}>
+                                📦 {order.orderStatus}
+                              </span>
+                            </div>
+                          </div>
+
+                          <div className="space-y-1 bg-white p-3 rounded-xl border border-stone-150 text-xs">
+                            {order.items?.map((item: any, idx: number) => (
+                              <div key={idx} className="flex justify-between items-center text-stone-800 font-semibold py-0.5">
+                                <span>{item.productName} <span className="text-stone-400 font-normal">x {item.quantity} {item.unit || 'ชิ้น'}</span></span>
+                                <span>฿{(item.price * item.quantity).toLocaleString()}</span>
+                              </div>
+                            ))}
+                            <div className="mt-2 pt-2 border-t border-stone-150 flex justify-between font-black text-stone-900 text-sm">
+                              <span>ราคารวม</span>
+                              <span className="text-emerald-600">฿{order.totalPrice?.toLocaleString()}</span>
+                            </div>
+                          </div>
+
+                          {order.shippingAddress && (
+                            <p className="text-[11px] text-stone-600 font-medium">
+                              <span className="font-bold text-stone-800">📍 ที่อยู่จัดส่ง:</span> {order.shippingAddress}
+                            </p>
+                          )}
+
+                          {order.slipUrl && (
+                            <button
+                              onClick={() => setViewingSlipUrl(order.slipUrl)}
+                              className="text-xs font-bold text-emerald-700 hover:text-emerald-800 underline flex items-center gap-1 cursor-pointer"
+                            >
+                              🧾 ดูสลิปหลักฐานชำระเงิน
+                            </button>
+                          )}
+                        </div>
+                      ))
+                  )}
                 </div>
               </div>
             </div>
