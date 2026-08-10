@@ -8,7 +8,7 @@ import { useAuth } from '@/providers/AuthProvider';
 import { useRef } from 'react';
 import { Product, Order, UserProfile, Category, ProductReview, OrderItem } from '@/types';
 import { getDashboardStats, getProducts, createProduct, updateProduct, deleteProduct, getCategories, createCategory, updateCategory, deleteCategory, getOrders, updateOrderStatus, getUsers, updateUserRole, deleteUser, createUser, updateUser } from '@/app/admin/actions';
-import { uploadFile } from '@/app/actions';
+import { uploadFile, getChats, sendMessage, markChatRead } from '@/app/actions';
 import { compressImage } from '@/lib/imageCompressor';
 
 export default function AdminPanel() {
@@ -77,16 +77,15 @@ export default function AdminPanel() {
     }
   };
 
-  const setCurrentUser = (u?: any) => {};
-  
-  const handleAdminSendChatMessage = () => {};
-  const handleProductSubmit = async (e: any) => { e.preventDefault(); };
-  const handleDeleteProduct = async (id: number) => { await deleteProduct(id); loadData(); };
-  const handleCategorySubmit = async (e: any) => { e.preventDefault(); };
-  const handleDeleteCategory = async (id: number) => { await deleteCategory(id); loadData(); };
-  const handleUpdateOrderStatus = async (id: string, data: { paymentStatus?: string; orderStatus?: string }) => { await updateOrderStatus(id, data); loadData(); };
-  const handleUpdateUserRole = async (id: number, role: string) => { await updateUserRole(id, role); loadData(); };
-  const handleDeleteUser = async (id: number) => { await deleteUser(id); loadData(); };
+  const handleUpdateUserRole = async (id: number, role: string) => {
+    await updateUserRole(id, role);
+    loadData();
+  };
+
+  const handleDeleteUser = async (id: number) => {
+    await deleteUser(id);
+    loadData();
+  };
 
   const handleImageUpload = async (file: File | undefined, onSuccess: (url: string) => void) => {
     if (!file) return;
@@ -106,7 +105,6 @@ export default function AdminPanel() {
     }
   };
 
-  
   // Chat
   const [chatThreads, setChatThreads] = useState<any>({});
   const [adminChatInput, setAdminChatInput] = useState('');
@@ -118,6 +116,38 @@ export default function AdminPanel() {
   useEffect(() => {
     loadData();
   }, [adminTab]);
+
+  useEffect(() => {
+    if (adminTab === 'chats') {
+      loadChats();
+      const interval = setInterval(loadChats, 3000);
+      return () => clearInterval(interval);
+    }
+  }, [adminTab]);
+
+  const loadChats = async () => {
+    try {
+      const dbThreads = await getChats();
+      const threadsObj: any = {};
+      dbThreads.forEach((t: any) => {
+        const key = t.username || t.user_email;
+        threadsObj[key] = {
+          email: t.user_email,
+          username: t.username,
+          unread: t.unread,
+          lastUpdated: t.last_updated ? new Date(t.last_updated).toISOString() : new Date().toISOString(),
+          messages: (t.messages || []).map((m: any) => ({
+            sender: m.sender,
+            text: m.text,
+            timestamp: m.created_at ? new Date(m.created_at).toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' }) : ''
+          }))
+        };
+      });
+      setChatThreads(threadsObj);
+    } catch (e) {
+      console.error('Error loading chats:', e);
+    }
+  };
 
   const loadData = async () => {
     try {
@@ -136,9 +166,27 @@ export default function AdminPanel() {
       } else if (adminTab === 'members') {
         setUsers(await getUsers());
         setOrders(await getOrders());
+      } else if (adminTab === 'chats') {
+        await loadChats();
       }
     } catch (e) {
       console.error(e);
+    }
+  };
+
+  const handleAdminSendChatMessage = async () => {
+    if (!selectedAdminChatKey || !adminChatInput.trim()) return;
+    const targetThread = chatThreads[selectedAdminChatKey];
+    if (!targetThread) return;
+
+    const textToSend = adminChatInput;
+    setAdminChatInput('');
+
+    try {
+      await sendMessage(targetThread.email, targetThread.username, 'admin', textToSend);
+      await loadChats();
+    } catch (err) {
+      console.error('Error sending admin chat message:', err);
     }
   };
 

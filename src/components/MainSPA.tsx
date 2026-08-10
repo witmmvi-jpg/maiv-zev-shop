@@ -5,7 +5,7 @@ import { useAuth } from '@/providers/AuthProvider';
 import { useCart } from '@/providers/CartProvider';
 import Image from 'next/image';
 import { getProducts, getCategories } from '@/app/admin/actions';
-import { uploadFile, getUsers, createUser, updateUser, createOrder, getOrders } from '@/app/actions';
+import { uploadFile, getUsers, createUser, updateUser, createOrder, getOrders, getChats, sendMessage, markChatRead } from '@/app/actions';
 import { compressImage } from '@/lib/imageCompressor';
 
 interface Product {
@@ -1035,7 +1035,39 @@ export default function MainSPA({ initialPage = 'home' }: { initialPage?: 'home'
     return false;
   };
 
-  const handleSendChatMessage = (textOverride?: string) => {
+  const loadDBChats = async () => {
+    try {
+      const dbThreads = await getChats();
+      if (!dbThreads || dbThreads.length === 0) return;
+
+      const threadsObj: { [key: string]: UserChatThread } = {};
+      dbThreads.forEach((t: any) => {
+        const key = t.username || t.user_email;
+        threadsObj[key] = {
+          username: t.username,
+          email: t.user_email,
+          unread: t.unread,
+          lastUpdated: t.last_updated ? new Date(t.last_updated).toISOString() : new Date().toISOString(),
+          messages: (t.messages || []).map((m: any) => ({
+            sender: m.sender as any,
+            text: m.text,
+            timestamp: m.created_at ? new Date(m.created_at).toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' }) : ''
+          }))
+        };
+      });
+      setChatThreads(threadsObj);
+    } catch (e) {
+      console.error('Error loading DB chats:', e);
+    }
+  };
+
+  useEffect(() => {
+    loadDBChats();
+    const interval = setInterval(loadDBChats, 4000);
+    return () => clearInterval(interval);
+  }, []);
+
+  const handleSendChatMessage = async (textOverride?: string) => {
     const msgText = textOverride || chatInput;
     if (!msgText.trim()) return;
 
@@ -1047,70 +1079,30 @@ export default function MainSPA({ initialPage = 'home' }: { initialPage?: 'home'
       return;
     }
 
-    const currentKey = currentUser ? currentUser.username : 'ผู้เยี่ยมชม';
-    const userMsg: ChatMessage = {
-      sender: 'user',
-      text: msgText,
-      timestamp: new Date().toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' })
-    };
-
-    setChatThreads(prev => {
-      const thread = prev[currentKey] || {
-        username: currentKey,
-        email: currentUser?.email || '',
-        messages: [
-          {
-            sender: 'bot',
-            text: currentKey === 'ผู้เยี่ยมชม'
-              ? 'สวัสดีครับ! ยินดีต้อนรับสู่สวนครอบครัว Maiv Zev ยายมีและทีมงานยินดีให้บริการครับ คุณสามารถเลือกหัวข้อคำถามด่วนด้านล่าง หรือพิมพ์คำถามที่ต้องการสอบถามได้เลยครับ 😊'
-              : `สวัสดีครับคุณ ${currentKey}! ยินดีต้อนรับสู่สวนครอบครัว Maiv Zev ยายมีและทีมงานยินดีให้บริการครับ คุณสามารถเลือกหัวข้อคำถามด่วนด้านล่าง หรือพิมพ์คำถามที่ต้องการสอบถามได้เลยครับ 😊`,
-            timestamp: new Date().toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' })
-          }
-        ],
-        lastUpdated: new Date().toISOString()
-      };
-      return {
-        ...prev,
-        [currentKey]: {
-          ...thread,
-          messages: [...thread.messages, userMsg],
-          unread: true, // Mark as unread so admin gets a badge
-          lastUpdated: new Date().toISOString()
-        }
-      };
-    });
+    const currentEmail = currentUser?.email || 'guest@maivzev.com';
+    const currentUsername = currentUser ? currentUser.username : 'ผู้เยี่ยมชม';
 
     if (!textOverride) {
       setChatInput('');
     }
 
-    // Auto bot typing response
-    setIsBotTyping(true);
-    setTimeout(() => {
-      const botReplyText = getBotResponse(msgText, !!currentUser);
-      const botMsg: ChatMessage = {
-        sender: 'bot',
-        text: botReplyText,
-        timestamp: new Date().toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' })
-      };
+    try {
+      await sendMessage(currentEmail, currentUsername, 'user', msgText);
+      await loadDBChats();
 
-      setChatThreads(prev => {
-        const thread = prev[currentKey];
-        if (!thread) return prev;
-        return {
-          ...prev,
-          [currentKey]: {
-            ...thread,
-            messages: [...thread.messages, botMsg],
-            lastUpdated: new Date().toISOString()
-          }
-        };
-      });
-      setIsBotTyping(false);
-    }, 1000);
+      setIsBotTyping(true);
+      setTimeout(async () => {
+        const botReplyText = getBotResponse(msgText, !!currentUser);
+        await sendMessage(currentEmail, currentUsername, 'bot', botReplyText);
+        await loadDBChats();
+        setIsBotTyping(false);
+      }, 1000);
+    } catch (err) {
+      console.error('Error sending message:', err);
+    }
   };
 
-  const handleAdminSendChatMessage = () => {
+  const handleAdminSendChatMessage = async () => {
     if (!selectedAdminChatKey || !adminChatInput.trim()) return;
 
     if (containsProfanity(adminChatInput)) {
@@ -1118,27 +1110,18 @@ export default function MainSPA({ initialPage = 'home' }: { initialPage?: 'home'
       return;
     }
 
-    const adminMsg: ChatMessage = {
-      sender: 'admin',
-      text: adminChatInput,
-      timestamp: new Date().toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' })
-    };
+    const targetThread = chatThreads[selectedAdminChatKey];
+    if (!targetThread) return;
 
-    setChatThreads(prev => {
-      const thread = prev[selectedAdminChatKey];
-      if (!thread) return prev;
-      return {
-        ...prev,
-        [selectedAdminChatKey]: {
-          ...thread,
-          messages: [...thread.messages, adminMsg],
-          unread: false, // Mark as read since admin replied
-          lastUpdated: new Date().toISOString()
-        }
-      };
-    });
-
+    const textToSend = adminChatInput;
     setAdminChatInput('');
+
+    try {
+      await sendMessage(targetThread.email || selectedAdminChatKey, targetThread.username, 'admin', textToSend);
+      await loadDBChats();
+    } catch (err) {
+      console.error('Error sending admin message:', err);
+    }
   };
 
   const handleSlipChange = (e: React.ChangeEvent<HTMLInputElement>) => {
