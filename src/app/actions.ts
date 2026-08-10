@@ -108,16 +108,17 @@ export async function getArticles() {
 }
 
 export async function getProducts() {
-  const products = await prisma.product.findMany();
+  const products = await prisma.product.findMany({ orderBy: { product_id: 'desc' } });
   return products.map(p => ({
     id: p.product_id.toString(),
     name: p.product_name,
+    description: p.description || '',
     price: Number(p.price),
-    originalPrice: undefined, // Add logic if needed later
-    promotionText: undefined,
-    unit: 'กก.', // Default based on mock data
+    originalPrice: p.original_price ? Number(p.original_price) : undefined,
+    promotionText: p.promotion_text || undefined,
+    unit: p.unit || 'กก.',
     image: p.image_url || '',
-    category: 'ผลไม้สด', // Default, maybe need category table later
+    category: p.category_name || 'ผลไม้สด',
     stock: p.stock,
     benefits: p.benefits || undefined,
   }));
