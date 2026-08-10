@@ -2,8 +2,6 @@
 
 import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
-import Navbar from '@/components/layout/Navbar';
-import Footer from '@/components/layout/Footer';
 import LoginModal from '@/components/modals/LoginModal';
 import { useAuth } from '@/providers/AuthProvider';
 import { getOrders, updateUser, uploadFile } from '@/app/actions';
@@ -92,9 +90,7 @@ export default function AccountPage() {
   });
 
   return (
-    <div className="min-h-screen bg-[#fafaf6] text-stone-800 flex flex-col selection:bg-emerald-500 selection:text-white">
-      <Navbar />
-
+    <div className="w-full flex flex-col selection:bg-emerald-500 selection:text-white">
       <main className="flex-grow max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-8 md:py-12">
         {/* Header Title */}
         <div className="mb-8 border-b border-stone-200 pb-5">
@@ -386,8 +382,6 @@ export default function AccountPage() {
 
       {/* Login Modal Popup */}
       {isLoginModalOpen && <LoginModal onClose={() => setIsLoginModalOpen(false)} />}
-
-      <Footer />
     </div>
   );
 }
