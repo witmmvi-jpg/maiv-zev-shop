@@ -2,6 +2,7 @@
 
 import prisma from '@/lib/prisma';
 import { supabase } from '@/lib/supabase';
+import { revalidatePath } from 'next/cache';
 import { mkdir, writeFile } from 'fs/promises';
 import path from 'path';
 import { randomUUID } from 'crypto';
@@ -174,6 +175,7 @@ export async function getOrders() {
 
 export async function getReviews() {
   const reviews = await prisma.productReview.findMany({
+    orderBy: { created_at: 'desc' },
     include: {
       user: true,
       product: true
@@ -183,12 +185,13 @@ export async function getReviews() {
   return reviews.map(r => ({
     id: r.review_id.toString(),
     productId: r.product_id?.toString() || '',
-    username: r.user?.username || 'Unknown',
+    username: r.user?.username || 'ผู้ใช้งาน',
+    userProfileImage: r.user?.profile_image || undefined,
     rating: r.rating,
     comment: r.comment || '',
     mediaUrl: r.media_url || undefined,
     mediaType: (r.media_type as 'image' | 'video' | 'none') || 'none',
-    createdAt: r.created_at ? r.created_at.toISOString() : new Date().toISOString(),
+    createdAt: r.created_at ? r.created_at.toISOString().replace('T', ' ').substring(0, 16) : new Date().toISOString().replace('T', ' ').substring(0, 16),
   }));
 }
 
@@ -300,16 +303,20 @@ export async function createReview(data: { email: string; productId: string; rat
   const user = await prisma.user.findUnique({ where: { email: data.email } });
   const prodId = parseInt(data.productId, 10);
 
-  return await prisma.productReview.create({
+  const review = await prisma.productReview.create({
     data: {
       product_id: isNaN(prodId) ? null : prodId,
       user_id: user?.user_id,
       rating: data.rating,
       comment: data.comment,
-      media_url: data.mediaUrl,
+      media_url: data.mediaUrl || null,
       media_type: data.mediaType || 'none'
     }
   });
+
+  revalidatePath('/');
+  revalidatePath('/products');
+  return review;
 }
 
 // --- Product Actions ---

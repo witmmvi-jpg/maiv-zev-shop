@@ -5,7 +5,7 @@ import { useAuth } from '@/providers/AuthProvider';
 import { useCart } from '@/providers/CartProvider';
 import Image from 'next/image';
 import { getProducts, getCategories } from '@/app/admin/actions';
-import { uploadFile, getUsers, createUser, updateUser, createOrder, getOrders, getChats, sendMessage, markChatRead, sendOtpAction } from '@/app/actions';
+import { uploadFile, getUsers, createUser, updateUser, createOrder, getOrders, getChats, sendMessage, markChatRead, sendOtpAction, getReviews, createReview } from '@/app/actions';
 import { compressImage } from '@/lib/imageCompressor';
 
 interface Product {
@@ -25,6 +25,7 @@ interface ProductReview {
   id: string;
   productId: string;
   username: string;
+  userProfileImage?: string;
   rating: number;
   comment: string;
   mediaUrl?: string;
@@ -524,17 +525,15 @@ export default function MainSPA({ initialPage = 'home' }: { initialPage?: 'home'
         localStorage.setItem('maivzev_chat_threads_v3', JSON.stringify(defaultThreads));
       }
 
-      const storedReviews = localStorage.getItem('maivzev_reviews_v3');
-      if (storedReviews) {
-        // Filter out any mock reviews so they are deleted from client's browser localStorage automatically
-        const parsed = JSON.parse(storedReviews) as ProductReview[];
-        const filtered = parsed.filter(r => r.id !== 'rev1' && r.id !== 'rev2' && r.id !== 'rev3');
-        setReviews(filtered);
-        localStorage.setItem('maivzev_reviews_v3', JSON.stringify(filtered));
-      } else {
-        setReviews([]);
-        localStorage.setItem('maivzev_reviews_v3', JSON.stringify([]));
-      }
+      getReviews().then(dbReviews => {
+        if (dbReviews && dbReviews.length > 0) {
+          setReviews(dbReviews as ProductReview[]);
+        } else {
+          setReviews([]);
+        }
+      }).catch(err => {
+        console.error('Error fetching reviews from DB:', err);
+      });
 
       setIsLoaded(true);
     }
@@ -4437,7 +4436,14 @@ export default function MainSPA({ initialPage = 'home' }: { initialPage?: 'home'
                       .map((review) => (
                         <div key={review.id} className="p-3 bg-stone-50 border border-stone-150 rounded-xl space-y-1.5">
                           <div className="flex items-center justify-between text-[11px] font-bold text-stone-500">
-                            <span className="text-stone-700">👤 {review.username}</span>
+                            <div className="flex items-center gap-2">
+                              {review.userProfileImage ? (
+                                <img src={review.userProfileImage} alt={review.username} className="w-5 h-5 rounded-full object-cover border border-stone-200" />
+                              ) : (
+                                <span>👤</span>
+                              )}
+                              <span className="text-stone-700 font-bold">{review.username}</span>
+                            </div>
                             <span>{review.createdAt}</span>
                           </div>
                           {/* Stars */}
@@ -4486,27 +4492,32 @@ export default function MainSPA({ initialPage = 'home' }: { initialPage?: 'home'
                   }
                   return (
                     <form
-                      onSubmit={(e) => {
+                      onSubmit={async (e) => {
                         e.preventDefault();
-                        // Add review logic
-                        const newRev: ProductReview = {
-                          id: `rev-${Date.now()}`,
-                          productId: selectedProductDetail.id,
-                          username: currentUser.username,
-                          rating: reviewRating,
-                          comment: reviewComment.trim(),
-                          mediaUrl: reviewMediaUrl || undefined,
-                          mediaType: reviewMediaType,
-                          createdAt: getLocalFormattedDate()
-                        };
-                        const updatedReviews = [newRev, ...reviews];
-                        setReviews(updatedReviews);
-                        // Reset form
-                        setReviewComment('');
-                        setReviewRating(5);
-                        setReviewMediaUrl('');
-                        setReviewMediaType('none');
-                        alert('บันทึกรีวิวของคุณเรียบร้อยแล้วครับ ขอบคุณสำหรับความคิดเห็นครับ!');
+                        if (!reviewComment.trim()) {
+                          alert('กรุณากรอกความคิดเห็นสำหรับรีวิวสินค้าครับ');
+                          return;
+                        }
+                        try {
+                          await createReview({
+                            email: currentUser.email,
+                            productId: selectedProductDetail.id,
+                            rating: reviewRating,
+                            comment: reviewComment.trim(),
+                            mediaUrl: reviewMediaUrl || undefined,
+                            mediaType: reviewMediaType,
+                          });
+                          const updated = await getReviews();
+                          setReviews(updated as ProductReview[]);
+                          setReviewComment('');
+                          setReviewRating(5);
+                          setReviewMediaUrl('');
+                          setReviewMediaType('none');
+                          alert('บันทึกรีวิวของคุณลงในระบบเรียบร้อยแล้วครับ ขอบคุณสำหรับความคิดเห็นครับ!');
+                        } catch (err) {
+                          console.error('Error submitting review:', err);
+                          alert('เกิดข้อผิดพลาดในการบันทึกรีวิว กรุณาลองใหม่อีกครั้งครับ');
+                        }
                       }}
                       className="space-y-3"
                     >
