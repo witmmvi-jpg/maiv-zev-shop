@@ -1,6 +1,7 @@
 'use server';
 
 import prisma from '@/lib/prisma';
+import { supabase } from '@/lib/supabase';
 import { mkdir, writeFile } from 'fs/promises';
 import path from 'path';
 import { randomUUID } from 'crypto';
@@ -17,15 +18,78 @@ export async function uploadFile(formData: FormData): Promise<{ url: string }> {
     throw new Error('ขนาดไฟล์ใหญ่เกินไป (สูงสุด 20MB)');
   }
 
-  const rawExt = path.extname(file.name).slice(1).toLowerCase();
-  const ext = /^[a-z0-9]{1,5}$/.test(rawExt) ? rawExt : (file.type.split('/')[1] || 'bin');
-  const filename = `${randomUUID()}.${ext}`;
+  const bytes = await file.arrayBuffer();
+  const buffer = Buffer.from(bytes);
 
-  const uploadDir = path.join(process.cwd(), 'public', 'uploads');
-  await mkdir(uploadDir, { recursive: true });
-  await writeFile(path.join(uploadDir, filename), Buffer.from(await file.arrayBuffer()));
+  // 1. Primary Method: Supabase Storage Cloud Upload
+  const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || process.env.SUPABASE_SERVICE_ROLE_KEY;
+  if (supabaseKey) {
+    try {
+      const rawExt = path.extname(file.name).slice(1).toLowerCase();
+      const ext = /^[a-z0-9]{1,5}$/.test(rawExt) ? rawExt : (file.type.split('/')[1] || 'webp');
+      const filename = `${randomUUID()}.${ext}`;
 
-  return { url: `/uploads/${filename}` };
+      const { data, error } = await supabase.storage.from('uploads').upload(filename, buffer, {
+        contentType: file.type || 'image/webp',
+        upsert: true,
+      });
+
+      if (!error && data) {
+        const { data: publicUrlData } = supabase.storage.from('uploads').getPublicUrl(filename);
+        if (publicUrlData?.publicUrl) {
+          return { url: publicUrlData.publicUrl };
+        }
+      } else if (error) {
+        console.warn('Supabase Storage upload warning:', error.message);
+      }
+    } catch (e) {
+      console.error('Supabase Storage error, falling back:', e);
+    }
+  }
+
+  // 2. Secondary Method: ImgBB API Key fallback if set
+  if (process.env.IMGBB_API_KEY) {
+    try {
+      const imgbbForm = new FormData();
+      imgbbForm.append('image', buffer.toString('base64'));
+      const res = await fetch(`https://api.imgbb.com/1/upload?key=${process.env.IMGBB_API_KEY}`, {
+        method: 'POST',
+        body: imgbbForm,
+      });
+      const data = await res.json();
+      if (data?.data?.url) {
+        return { url: data.data.url };
+      }
+    } catch (e) {
+      console.error('ImgBB upload error, falling back:', e);
+    }
+  }
+
+  const isVercel = Boolean(process.env.VERCEL || process.env.NEXT_PUBLIC_VERCEL_ENV);
+
+  // 3. Vercel Serverless Fallback: Base64 Data URL
+  if (isVercel) {
+    const mime = file.type || 'image/jpeg';
+    const base64DataUrl = `data:${mime};base64,${buffer.toString('base64')}`;
+    return { url: base64DataUrl };
+  }
+
+  // 4. Local Development Fallback: Disk Storage / Base64
+  try {
+    const rawExt = path.extname(file.name).slice(1).toLowerCase();
+    const ext = /^[a-z0-9]{1,5}$/.test(rawExt) ? rawExt : (file.type.split('/')[1] || 'bin');
+    const filename = `${randomUUID()}.${ext}`;
+
+    const uploadDir = path.join(process.cwd(), 'public', 'uploads');
+    await mkdir(uploadDir, { recursive: true });
+    await writeFile(path.join(uploadDir, filename), buffer);
+
+    return { url: `/uploads/${filename}` };
+  } catch (err) {
+    console.warn('Local upload failed, falling back to base64:', err);
+    const mime = file.type || 'image/jpeg';
+    return { url: `data:${mime};base64,${buffer.toString('base64')}` };
+  }
 }
 
 export async function getArticles() {

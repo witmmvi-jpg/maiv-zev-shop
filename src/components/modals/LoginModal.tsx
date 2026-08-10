@@ -3,6 +3,7 @@
 import React, { useState } from 'react';
 import { useAuth } from '@/providers/AuthProvider';
 import { getUsers, createUser, updateUser, uploadFile } from '@/app/actions';
+import { compressImage, fileToBase64 } from '@/lib/imageCompressor';
 import { UserProfile } from '@/types';
 
 interface LoginModalProps {
@@ -54,54 +55,20 @@ export default function LoginModal({ onClose }: LoginModalProps) {
     }
   };
 
-  const compressImage = (file: File): Promise<string> => {
-    return new Promise((resolve, reject) => {
-      const reader = new FileReader();
-      reader.readAsDataURL(file);
-      reader.onload = (event) => {
-        const img = new Image();
-        img.src = event.target?.result as string;
-        img.onload = () => {
-          const canvas = document.createElement('canvas');
-          const MAX_WIDTH = 400;
-          const MAX_HEIGHT = 400;
-          let width = img.width;
-          let height = img.height;
-          if (width > height) {
-            if (width > MAX_WIDTH) {
-              height *= MAX_WIDTH / width;
-              width = MAX_WIDTH;
-            }
-          } else {
-            if (height > MAX_HEIGHT) {
-              width *= MAX_HEIGHT / height;
-              height = MAX_HEIGHT;
-            }
-          }
-          canvas.width = width;
-          canvas.height = height;
-          const ctx = canvas.getContext('2d');
-          ctx?.drawImage(img, 0, 0, width, height);
-          resolve(canvas.toDataURL('image/jpeg', 0.7));
-        };
-        img.onerror = (error) => reject(error);
-      };
-      reader.onerror = (error) => reject(error);
-    });
-  };
-
   const handleProfileImageChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
-      if (file.size > 5 * 1024 * 1024) {
-        alert('ขนาดไฟล์รูปภาพต้องไม่เกิน 5MB ครับ');
+      if (file.size > 20 * 1024 * 1024) {
+        alert('ขนาดไฟล์รูปภาพต้องไม่เกิน 20MB ครับ');
         return;
       }
       try {
-        const compressedBase64 = await compressImage(file);
-        setSignupProfilePreview(compressedBase64);
+        const compressed = await compressImage(file);
+        const previewUrl = await fileToBase64(compressed);
+        setSignupProfilePreview(previewUrl);
+
         const formData = new FormData();
-        formData.append('file', file);
+        formData.append('file', compressed);
         const { url } = await uploadFile(formData);
         setSignupProfileImage(url);
       } catch (err) {

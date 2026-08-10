@@ -6,6 +6,7 @@ import { useCart } from '@/providers/CartProvider';
 import Image from 'next/image';
 import { getProducts, getCategories } from '@/app/admin/actions';
 import { uploadFile, getUsers, createUser, updateUser, createOrder, getOrders } from '@/app/actions';
+import { compressImage } from '@/lib/imageCompressor';
 
 interface Product {
   id: string;
@@ -657,67 +658,26 @@ export default function MainSPA({ initialPage = 'home' }: { initialPage?: 'home'
     );
   };
 
-  const compressImage = (base64Str: string, maxWidth: number, maxHeight: number, quality = 0.6): Promise<string> => {
-    return new Promise((resolve) => {
-      const img = new window.Image();
-      img.src = base64Str;
-      img.onload = () => {
-        const canvas = document.createElement('canvas');
-        let width = img.width;
-        let height = img.height;
-
-        if (width > height) {
-          if (width > maxWidth) {
-            height = Math.round((height * maxWidth) / width);
-            width = maxWidth;
-          }
-        } else {
-          if (height > maxHeight) {
-            width = Math.round((width * maxHeight) / height);
-            height = maxHeight;
-          }
-        }
-
-        canvas.width = width;
-        canvas.height = height;
-        const ctx = canvas.getContext('2d');
-        if (ctx) {
-          ctx.drawImage(img, 0, 0, width, height);
-          resolve(canvas.toDataURL('image/jpeg', quality));
-        } else {
-          resolve(base64Str);
-        }
-      };
-      img.onerror = () => {
-        resolve(base64Str);
-      };
-    });
-  };
-
   const handleProfileImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
-      if (file.size > 10 * 1024 * 1024) {
-        alert('ขนาดไฟล์ใหญ่เกินไปครับ (สูงสุดไม่เกิน 10MB)');
+      if (file.size > 20 * 1024 * 1024) {
+        alert('ขนาดไฟล์ใหญ่เกินไปครับ (สูงสุดไม่เกิน 20MB)');
         return;
       }
-      const reader = new FileReader();
-      reader.onloadend = async () => {
-        const base64String = reader.result as string;
-        // Compress avatar to max 160x160 pixels with 0.5 quality for the instant preview
-        const compressed = await compressImage(base64String, 160, 160, 0.5);
-        setSignupProfilePreview(compressed);
+      (async () => {
         try {
+          const compressed = await compressImage(file);
           const formData = new FormData();
-          formData.append('file', file);
+          formData.append('file', compressed);
           const { url } = await uploadFile(formData);
+          setSignupProfilePreview(url);
           setSignupProfileImage(url);
         } catch (err) {
           console.error('Error uploading profile image:', err);
           alert('เกิดข้อผิดพลาดในการอัปโหลดรูปภาพครับ');
         }
-      };
-      reader.readAsDataURL(file);
+      })();
     }
   };
 
@@ -1184,14 +1144,15 @@ export default function MainSPA({ initialPage = 'home' }: { initialPage?: 'home'
   const handleSlipChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
-      if (file.size > 10 * 1024 * 1024) {
-        alert('ขนาดไฟล์ใหญ่เกินไปครับ (สูงสุดไม่เกิน 10MB)');
+      if (file.size > 20 * 1024 * 1024) {
+        alert('ขนาดไฟล์ใหญ่เกินไปครับ (สูงสุดไม่เกิน 20MB)');
         return;
       }
       (async () => {
         try {
+          const compressed = await compressImage(file);
           const formData = new FormData();
-          formData.append('file', file);
+          formData.append('file', compressed);
           const { url } = await uploadFile(formData);
           setSlipPreview(url);
         } catch (err) {
@@ -4624,14 +4585,15 @@ export default function MainSPA({ initialPage = 'home' }: { initialPage?: 'home'
                             onChange={async (e) => {
                               const file = e.target.files?.[0];
                               if (file) {
-                                if (file.size > 15 * 1024 * 1024) {
-                                  alert('ขนาดไฟล์ใหญ่เกินไปครับ (สูงสุดไม่เกิน 15MB)');
+                                if (file.size > 20 * 1024 * 1024) {
+                                  alert('ขนาดไฟล์ใหญ่เกินไปครับ (สูงสุดไม่เกิน 20MB)');
                                   return;
                                 }
                                 const isVideo = file.type.startsWith('video/');
                                 try {
+                                  const uploadPayload = isVideo ? file : await compressImage(file);
                                   const formData = new FormData();
-                                  formData.append('file', file);
+                                  formData.append('file', uploadPayload);
                                   const { url } = await uploadFile(formData);
                                   setReviewMediaUrl(url);
                                   setReviewMediaType(isVideo ? 'video' : 'image');

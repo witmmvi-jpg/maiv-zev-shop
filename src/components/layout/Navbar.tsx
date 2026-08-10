@@ -7,6 +7,7 @@ import { usePathname } from 'next/navigation';
 import { useAuth } from '@/providers/AuthProvider';
 import { useCart } from '@/providers/CartProvider';
 import { uploadFile, updateUser } from '@/app/actions';
+import { compressImage } from '@/lib/imageCompressor';
 import LoginModal from '@/components/modals/LoginModal';
 
 export default function Navbar() {
@@ -33,13 +34,14 @@ export default function Navbar() {
   const handleProfileImageChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!currentUser || !file) return;
-    if (file.size > 10 * 1024 * 1024) {
-      alert('ขนาดไฟล์ใหญ่เกินไปครับ (สูงสุดไม่เกิน 10MB)');
+    if (file.size > 20 * 1024 * 1024) {
+      alert('ขนาดไฟล์ใหญ่เกินไปครับ (สูงสุดไม่เกิน 20MB)');
       return;
     }
     try {
+      const compressed = await compressImage(file);
       const formData = new FormData();
-      formData.append('file', file);
+      formData.append('file', compressed);
       const { url } = await uploadFile(formData);
       await updateUser(currentUser.email, { profileImage: url });
       setCurrentUser({ ...currentUser, profileImage: url });

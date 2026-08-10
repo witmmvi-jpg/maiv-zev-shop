@@ -9,6 +9,7 @@ import { useRef } from 'react';
 import { Product, Order, UserProfile, Category, ProductReview, OrderItem } from '@/types';
 import { getDashboardStats, getProducts, createProduct, updateProduct, deleteProduct, getCategories, createCategory, updateCategory, deleteCategory, getOrders, updateOrderStatus, getUsers, updateUserRole, deleteUser } from '@/app/admin/actions';
 import { uploadFile } from '@/app/actions';
+import { compressImage } from '@/lib/imageCompressor';
 
 export default function AdminPanel() {
   const { currentUser } = useAuth();
@@ -54,13 +55,14 @@ export default function AdminPanel() {
 
   const handleImageUpload = async (file: File | undefined, onSuccess: (url: string) => void) => {
     if (!file) return;
-    if (file.size > 10 * 1024 * 1024) {
-      alert('ขนาดไฟล์ใหญ่เกินไปครับ (สูงสุดไม่เกิน 10MB)');
+    if (file.size > 20 * 1024 * 1024) {
+      alert('ขนาดไฟล์ใหญ่เกินไปครับ (สูงสุดไม่เกิน 20MB)');
       return;
     }
     try {
+      const compressed = await compressImage(file);
       const formData = new FormData();
-      formData.append('file', file);
+      formData.append('file', compressed);
       const { url } = await uploadFile(formData);
       onSuccess(url);
     } catch (err) {

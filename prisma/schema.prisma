@@ -12,7 +12,7 @@ model User {
   email      String          @unique @db.VarChar(150)
   password   String          @db.VarChar(255)
   phone      String?         @db.VarChar(20)
-  profile_image String?      @db.VarChar(500)
+  profile_image String?      @db.Text
   role       String          @db.VarChar(20) // 'Admin', 'Member', 'User'
   created_at DateTime?       @default(now()) @db.Timestamp(6)
   orders     Order[]
@@ -28,7 +28,7 @@ model Product {
   benefits     String?         @db.Text
   price        Decimal         @db.Decimal(10, 2)
   stock        Int             @default(0)
-  image_url      String?         @db.VarChar(500)
+  image_url      String?         @db.Text
   unit           String?         @db.VarChar(50)
   category_name  String?         @db.VarChar(100)
   original_price Decimal?        @db.Decimal(10, 2)
@@ -48,7 +48,7 @@ model Order {
   payment_status  String        @db.VarChar(50)
   order_status    String        @db.VarChar(50)
   shipping_address String?      @db.Text
-  slip_url        String?       @db.VarChar(500)
+  slip_url        String?       @db.Text
   created_at      DateTime?     @default(now()) @db.Timestamp(6)
   user            User?         @relation(fields: [user_id], references: [user_id], onDelete: Cascade, onUpdate: NoAction)
   orderDetails    OrderDetail[]
@@ -87,9 +87,9 @@ model Category {
   category_id  Int             @id @default(autoincrement())
   name         String          @db.VarChar(100)
   description  String?         @db.Text
-  image        String?         @db.VarChar(500)
-  gradient     String?         @db.VarChar(50)
-  badge_color  String?         @db.VarChar(50)
+  image        String?         @db.Text
+  gradient     String?         @db.Text
+  badge_color  String?         @db.Text
 
   @@map("categories")
 }
@@ -121,7 +121,7 @@ model Article {
   title      String    @db.VarChar(255)
   excerpt    String?   @db.Text
   content    String?   @db.Text
-  image      String?   @db.VarChar(500)
+  image      String?   @db.Text
   category   String?   @db.VarChar(100)
   date       DateTime? @default(now()) @db.Date
 
