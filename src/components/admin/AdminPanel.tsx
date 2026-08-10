@@ -9,10 +9,11 @@ import { useRef } from 'react';
 import { Product, Order, UserProfile, Category, ProductReview, OrderItem } from '@/types';
 import { getDashboardStats, getProducts, createProduct, updateProduct, deleteProduct, getCategories, createCategory, updateCategory, deleteCategory, getOrders, updateOrderStatus, getUsers, updateUserRole, deleteUser, createUser, updateUser } from '@/app/admin/actions';
 import { uploadFile, getChats, sendMessage, markChatRead } from '@/app/actions';
-import { compressImage } from '@/lib/imageCompressor';
+import LoginModal from '@/components/modals/LoginModal';
 
 export default function AdminPanel() {
-  const { currentUser } = useAuth();
+  const { currentUser, isLoaded } = useAuth();
+  const [isLoginModalOpen, setIsLoginModalOpen] = useState(false);
   
   const [adminTab, setAdminTab] = useState<'dashboard' | 'products' | 'categories' | 'orders' | 'members' | 'payments' | 'chats'>('dashboard');
   
@@ -199,6 +200,54 @@ export default function AdminPanel() {
 
   // Format currency
   const formatCurrency = (val: number) => val.toLocaleString('th-TH');
+
+  if (!isLoaded) {
+    return (
+      <div className="min-h-screen bg-stone-50 flex items-center justify-center p-4">
+        <div className="text-center space-y-3">
+          <div className="w-10 h-10 border-4 border-emerald-600 border-t-transparent rounded-full animate-spin mx-auto"></div>
+          <p className="text-sm font-bold text-stone-600">กำลังตรวจสอบสิทธิ์การเข้าถึง...</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (!currentUser || currentUser.role !== 'Admin') {
+    return (
+      <div className="min-h-screen bg-stone-50 flex items-center justify-center p-4">
+        <div className="max-w-md w-full bg-white rounded-3xl p-8 shadow-xl border border-stone-150 text-center space-y-6 animate-in fade-in zoom-in-95 duration-200">
+          <div className="w-20 h-20 bg-red-50 text-red-600 rounded-3xl flex items-center justify-center mx-auto text-4xl shadow-inner border border-red-100">
+            🔒
+          </div>
+          <div className="space-y-2">
+            <h3 className="text-2xl font-black text-stone-900">ปฏิเสธการเข้าถึง (Access Denied)</h3>
+            <p className="text-xs text-stone-500 font-medium leading-relaxed">
+              หน้านี้สำหรับผู้ดูแลระบบ (Admin) เท่านั้นครับ กรุณาล็อกอินด้วยบัญชีแอดมินเพื่อเข้าใช้งาน
+            </p>
+          </div>
+          <div className="pt-2 flex flex-col gap-2.5">
+            <button
+              onClick={() => setIsLoginModalOpen(true)}
+              className="w-full py-3.5 px-6 rounded-2xl bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold text-sm transition-all shadow-md shadow-emerald-600/20 cursor-pointer"
+            >
+              🔑 เข้าสู่ระบบแอดมิน
+            </button>
+            <a
+              href="/"
+              className="w-full py-3.5 px-6 rounded-2xl bg-stone-100 hover:bg-stone-200 text-stone-700 font-bold text-sm transition-all cursor-pointer block text-center"
+            >
+              🏠 กลับหน้าหลักร้านค้า
+            </a>
+          </div>
+        </div>
+        {isLoginModalOpen && (
+          <LoginModal
+            onClose={() => setIsLoginModalOpen(false)}
+          />
+        )}
+      </div>
+    );
+  }
 
   return (
     <>
