@@ -388,10 +388,23 @@ export async function deleteCategory(id: string) {
 
 // --- Chat Actions ---
 export async function getChats() {
-  return await prisma.chatThread.findMany({
+  const threads = await prisma.chatThread.findMany({
     include: { messages: true },
     orderBy: { last_updated: 'desc' }
   });
+
+  const emails = threads.map(t => t.user_email).filter(Boolean);
+  const users = await prisma.user.findMany({
+    where: { email: { in: emails } },
+    select: { email: true, profile_image: true }
+  });
+
+  const userMap = new Map(users.map(u => [u.email, u.profile_image]));
+
+  return threads.map(t => ({
+    ...t,
+    profileImage: userMap.get(t.user_email) || ''
+  }));
 }
 
 export async function sendMessage(userEmail: string, username: string, sender: 'user' | 'admin' | 'bot', text: string) {

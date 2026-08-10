@@ -70,6 +70,7 @@ export interface ChatMessage {
 export interface UserChatThread {
   username: string;
   email?: string;
+  profileImage?: string;
   messages: ChatMessage[];
   lastUpdated: string;
   unread?: boolean;

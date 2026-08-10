@@ -135,6 +135,7 @@ export default function AdminPanel() {
           email: t.user_email,
           username: t.username,
           unread: t.unread,
+          profileImage: t.profileImage || '',
           lastUpdated: t.last_updated ? new Date(t.last_updated).toISOString() : new Date().toISOString(),
           messages: (t.messages || []).map((m: any) => ({
             sender: m.sender,
@@ -1206,9 +1207,22 @@ export default function AdminPanel() {
                                       : 'hover:bg-stone-50'
                                       }`}
                                   >
-                                    <div className="w-10 h-10 rounded-full bg-purple-100 text-purple-700 flex items-center justify-center font-bold text-sm flex-shrink-0">
-                                      {key === 'ผู้เยี่ยมชม' ? '👤' : key.charAt(0)}
-                                    </div>
+                                    {(thread as any).profileImage ? (
+                                      <div className="w-10 h-10 rounded-full overflow-hidden border border-purple-200 bg-purple-50 flex-shrink-0 flex items-center justify-center shadow-xs">
+                                        <img
+                                          src={(thread as any).profileImage}
+                                          alt={key}
+                                          className="w-full h-full object-cover"
+                                          onError={(e) => {
+                                            (e.target as HTMLElement).style.display = 'none';
+                                          }}
+                                        />
+                                      </div>
+                                    ) : (
+                                      <div className="w-10 h-10 rounded-full bg-purple-100 text-purple-700 flex items-center justify-center font-bold text-sm flex-shrink-0">
+                                        {key === 'ผู้เยี่ยมชม' ? '👤' : key.charAt(0).toUpperCase()}
+                                      </div>
+                                    )}
                                     <div className="flex-1 min-w-0">
                                       <div className="flex items-center justify-between">
                                         <p className={`text-xs font-bold truncate ${(thread as any).unread ? 'text-stone-900 font-black' : 'text-stone-700'}`}>
@@ -1242,9 +1256,22 @@ export default function AdminPanel() {
                             {/* Thread Header */}
                             <div className="p-4 bg-white border-b border-stone-200 flex items-center justify-between">
                               <div className="flex items-center gap-3">
-                                <div className="w-10 h-10 rounded-full bg-purple-100 text-purple-700 flex items-center justify-center font-bold text-sm">
-                                  {selectedAdminChatKey === 'ผู้เยี่ยมชม' ? '👤' : selectedAdminChatKey.charAt(0)}
-                                </div>
+                                {chatThreads[selectedAdminChatKey].profileImage ? (
+                                  <div className="w-10 h-10 rounded-full overflow-hidden border border-purple-200 bg-purple-50 flex-shrink-0 flex items-center justify-center shadow-xs">
+                                    <img
+                                      src={chatThreads[selectedAdminChatKey].profileImage}
+                                      alt={selectedAdminChatKey}
+                                      className="w-full h-full object-cover"
+                                      onError={(e) => {
+                                        (e.target as HTMLElement).style.display = 'none';
+                                      }}
+                                    />
+                                  </div>
+                                ) : (
+                                  <div className="w-10 h-10 rounded-full bg-purple-100 text-purple-700 flex items-center justify-center font-bold text-sm flex-shrink-0">
+                                    {selectedAdminChatKey === 'ผู้เยี่ยมชม' ? '👤' : selectedAdminChatKey.charAt(0).toUpperCase()}
+                                  </div>
+                                )}
                                 <div>
                                   <div className="flex items-center gap-2">
                                     <h4 className="font-extrabold text-sm text-stone-850">{selectedAdminChatKey}</h4>
@@ -1270,8 +1297,21 @@ export default function AdminPanel() {
                                   <div key={idx} className={`flex ${isMe ? 'justify-end' : 'justify-start'} animate-in fade-in slide-in-from-bottom-2 duration-150`}>
                                     <div className="flex items-end gap-2 max-w-[80%]">
                                       {!isMe && (
-                                        <div className="w-8 h-8 rounded-full bg-stone-200 text-stone-700 flex items-center justify-center text-xs font-bold flex-shrink-0">
-                                          {msg.sender === 'bot' ? '👵' : '👤'}
+                                        <div className="w-8 h-8 rounded-full overflow-hidden bg-stone-200 text-stone-700 flex items-center justify-center text-xs font-bold flex-shrink-0 border border-stone-200">
+                                          {msg.sender === 'bot' ? (
+                                            '👵'
+                                          ) : chatThreads[selectedAdminChatKey]?.profileImage ? (
+                                            <img
+                                              src={chatThreads[selectedAdminChatKey].profileImage}
+                                              alt="Customer"
+                                              className="w-full h-full object-cover"
+                                              onError={(e) => {
+                                                (e.target as HTMLElement).style.display = 'none';
+                                              }}
+                                            />
+                                          ) : (
+                                            '👤'
+                                          )}
                                         </div>
                                       )}
                                       <div className="flex flex-col">

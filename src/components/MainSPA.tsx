@@ -85,6 +85,7 @@ interface ChatMessage {
 interface UserChatThread {
   username: string;
   email?: string;
+  profileImage?: string;
   messages: ChatMessage[];
   lastUpdated: string;
   unread?: boolean;
@@ -1047,6 +1048,7 @@ export default function MainSPA({ initialPage = 'home' }: { initialPage?: 'home'
           username: t.username,
           email: t.user_email,
           unread: t.unread,
+          profileImage: t.profileImage || '',
           lastUpdated: t.last_updated ? new Date(t.last_updated).toISOString() : new Date().toISOString(),
           messages: (t.messages || []).map((m: any) => ({
             sender: m.sender as any,
