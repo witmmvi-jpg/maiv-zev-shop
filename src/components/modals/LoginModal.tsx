@@ -140,16 +140,8 @@ export default function LoginModal({ onClose }: LoginModalProps) {
       });
     }
 
-    setMockNotification({
-      show: true,
-      type: isEmail ? 'email' : 'sms',
-      title: isEmail ? 'รหัสยืนยันการตั้งรหัสผ่านใหม่ (Email)' : `ข้อความรหัสยืนยัน (SMS)`,
-      body: isEmail
-        ? `ระบบสวน Maiv Zev: รหัส OTP ของคุณคือ [ ${generatedOtp} ] ใช้สำหรับรีเซ็ตรหัสผ่านบัญชี ${found.email}`
-        : `[Maiv Zev] รหัส OTP ของคุณคือ [ ${generatedOtp} ] ห้ามเปิดเผยรหัสนี้แก่บุคคลอื่น`
-    });
     alert(isEmail
-      ? `📧 ระบบได้ส่งรหัสยืนยัน OTP ไปยังอีเมล ${found.email} เรียบร้อยแล้วครับ! (รหัสคือ ${generatedOtp})`
+      ? `📧 ระบบได้ส่งรหัสยืนยัน OTP ไปยังอีเมล ${found.email} เรียบร้อยแล้วครับ! กรุณาเช็กกล่องข้อความในอีเมลเพื่อนำรหัสมากรอกยืนยัน`
       : '📱 ระบบได้ส่งรหัสยืนยัน OTP ไปที่เบอร์โทรศัพท์ของคุณแล้วครับ'
     );
     setForgotStep(2);
@@ -157,15 +149,6 @@ export default function LoginModal({ onClose }: LoginModalProps) {
 
   return (
     <div className="fixed inset-0 z-50 overflow-hidden flex items-center justify-center p-4 bg-stone-900/60 backdrop-blur-sm animate-in fade-in duration-205">
-      {mockNotification?.show && (
-        <div className="fixed top-4 right-4 bg-white p-4 rounded-xl shadow-2xl border border-stone-200 z-[100] max-w-sm animate-in slide-in-from-right">
-          <div className="flex justify-between items-start mb-2">
-            <h4 className="font-bold text-sm text-stone-900">{mockNotification.title}</h4>
-            <button onClick={() => setMockNotification(null)} className="text-stone-400 hover:text-stone-600">×</button>
-          </div>
-          <p className="text-xs text-stone-600">{mockNotification.body}</p>
-        </div>
-      )}
 
       <div className="bg-white rounded-3xl max-w-md w-full p-6 shadow-2xl border border-stone-100 animate-in zoom-in-95 duration-200 flex flex-col relative max-h-[90vh]">
         <button onClick={onClose} className="absolute top-4 right-4 text-stone-400 hover:text-stone-600 focus:outline-none cursor-pointer" title="ปิด">

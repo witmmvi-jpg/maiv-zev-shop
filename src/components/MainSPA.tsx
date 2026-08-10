@@ -3963,17 +3963,8 @@ export default function MainSPA({ initialPage = 'home' }: { initialPage?: 'home'
                       }
 
                       const isEmail = target.includes('@');
-                      setMockNotification({
-                        show: true,
-                        type: isEmail ? 'email' : 'sms',
-                        title: isEmail ? 'รหัสยืนยันการตั้งรหัสผ่านใหม่ (Email)' : `ข้อความรหัสยืนยัน (SMS)`,
-                        body: isEmail
-                          ? `ระบบสวน Maiv Zev: รหัส OTP ของคุณคือ [ ${generatedOtp} ] ใช้สำหรับรีเซ็ตรหัสผ่านบัญชี ${found.email}`
-                          : `[Maiv Zev] รหัส OTP ของคุณคือ [ ${generatedOtp} ] ห้ามเปิดเผยรหัสนี้แก่บุคคลอื่น`
-                      });
-
                       alert(isEmail
-                        ? `📧 ระบบได้ส่งรหัสยืนยัน OTP ไปยังอีเมล ${found.email} เรียบร้อยแล้วครับ! (รหัสคือ ${generatedOtp})`
+                        ? `📧 ระบบได้ส่งรหัสยืนยัน OTP ไปยังอีเมล ${found.email} เรียบร้อยแล้วครับ! กรุณาเช็กกล่องข้อความในอีเมลเพื่อนำรหัสมากรอกยืนยัน`
                         : '📱 ระบบได้ส่งรหัสยืนยัน OTP ไปที่เบอร์โทรศัพท์ของคุณแล้วครับ'
                       );
 
@@ -4309,29 +4300,7 @@ export default function MainSPA({ initialPage = 'home' }: { initialPage?: 'home'
         </div>
       )}
 
-      {/* Mock SMS/Email Notification Banner */}
-      {mockNotification.show && (
-        <div className="fixed top-4 right-4 z-[9999] max-w-sm w-full bg-stone-900 text-white p-4 rounded-2xl shadow-2xl border border-stone-850 flex items-start gap-3 animate-in slide-in-from-top-4 duration-300">
-          <div className="flex-shrink-0 text-xl">
-            {mockNotification.type === 'sms' ? '💬' : '📧'}
-          </div>
-          <div className="flex-1 min-w-0">
-            <p className="text-xs font-extrabold text-stone-400 tracking-wider uppercase">
-              {mockNotification.type === 'sms' ? 'ข้อความใหม่ (SMS)' : 'อีเมลเข้าใหม่'}
-            </p>
-            <p className="text-sm font-bold text-white mt-0.5">{mockNotification.title}</p>
-            <p className="text-xs text-stone-300 mt-1 font-medium leading-relaxed bg-white/5 p-2 rounded-xl border border-white/5">
-              {mockNotification.body}
-            </p>
-          </div>
-          <button
-            onClick={() => setMockNotification(prev => ({ ...prev, show: false }))}
-            className="flex-shrink-0 text-stone-400 hover:text-white cursor-pointer font-bold text-xs p-1"
-          >
-            ✕
-          </button>
-        </div>
-      )}
+      {/* Mock SMS/Email Notification Banner removed */}
 
       {/* 8. Product Details & Reviews Modal */}
       {selectedProductDetail && (
