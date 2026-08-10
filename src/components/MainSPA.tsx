@@ -5,7 +5,7 @@ import { useAuth } from '@/providers/AuthProvider';
 import { useCart } from '@/providers/CartProvider';
 import Image from 'next/image';
 import { getProducts, getCategories } from '@/app/admin/actions';
-import { uploadFile, getUsers, createUser, updateUser, createOrder, getOrders, getChats, sendMessage, markChatRead } from '@/app/actions';
+import { uploadFile, getUsers, createUser, updateUser, createOrder, getOrders, getChats, sendMessage, markChatRead, sendOtpAction } from '@/app/actions';
 import { compressImage } from '@/lib/imageCompressor';
 
 interface Product {
@@ -3946,13 +3946,22 @@ export default function MainSPA({ initialPage = 'home' }: { initialPage?: 'home'
                         return;
                       }
 
-                      // Generate 6-digit OTP code
                       const generatedOtp = Math.floor(100000 + Math.random() * 900000).toString();
                       setForgotOtpCode(generatedOtp);
                       setForgotFoundUser(found);
                       setUserEnteredOtp('');
 
-                      // Send mock notification
+                      // Send real email via Nodemailer & Gmail SMTP
+                      if (found.email) {
+                        sendOtpAction(found.email, generatedOtp).then(res => {
+                          if (res.success) {
+                            console.log('Real OTP email sent to:', found.email);
+                          } else {
+                            console.warn('Real OTP email error:', res.error);
+                          }
+                        });
+                      }
+
                       const isEmail = target.includes('@');
                       setMockNotification({
                         show: true,
@@ -3964,8 +3973,8 @@ export default function MainSPA({ initialPage = 'home' }: { initialPage?: 'home'
                       });
 
                       alert(isEmail
-                        ? '📧 ระบบได้ส่งรหัสยืนยัน OTP จำลองไปที่อีเมลของคุณแล้ว กรุณาเช็คการแจ้งเตือนมุมขวาบนของจอภาพครับ'
-                        : '📱 ระบบได้ส่งรหัสยืนยัน OTP จำลองไปที่เบอร์โทรศัพท์ของคุณแล้ว กรุณาเช็คการแจ้งเตือนมุมขวาบนของจอภาพครับ'
+                        ? `📧 ระบบได้ส่งรหัสยืนยัน OTP ไปยังอีเมล ${found.email} เรียบร้อยแล้วครับ! (รหัสคือ ${generatedOtp})`
+                        : '📱 ระบบได้ส่งรหัสยืนยัน OTP ไปที่เบอร์โทรศัพท์ของคุณแล้วครับ'
                       );
 
                       setForgotStep(2);

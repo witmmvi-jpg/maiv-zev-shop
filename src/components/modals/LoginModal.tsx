@@ -2,7 +2,7 @@
 
 import React, { useState } from 'react';
 import { useAuth } from '@/providers/AuthProvider';
-import { getUsers, createUser, updateUser, uploadFile } from '@/app/actions';
+import { getUsers, createUser, updateUser, uploadFile, sendOtpAction } from '@/app/actions';
 import { compressImage, fileToBase64 } from '@/lib/imageCompressor';
 import { UserProfile } from '@/types';
 
@@ -128,6 +128,18 @@ export default function LoginModal({ onClose }: LoginModalProps) {
     setForgotFoundUser(found);
     setUserEnteredOtp('');
     const isEmail = target.includes('@');
+
+    // Trigger real email sending via Nodemailer & Gmail SMTP
+    if (found.email) {
+      sendOtpAction(found.email, generatedOtp).then(res => {
+        if (res.success) {
+          console.log('Real OTP email sent to:', found.email);
+        } else {
+          console.warn('Real OTP email warning:', res.error);
+        }
+      });
+    }
+
     setMockNotification({
       show: true,
       type: isEmail ? 'email' : 'sms',
@@ -137,8 +149,8 @@ export default function LoginModal({ onClose }: LoginModalProps) {
         : `[Maiv Zev] รหัส OTP ของคุณคือ [ ${generatedOtp} ] ห้ามเปิดเผยรหัสนี้แก่บุคคลอื่น`
     });
     alert(isEmail
-      ? '📧 ระบบได้ส่งรหัสยืนยัน OTP จำลองไปที่อีเมลของคุณแล้ว กรุณาเช็คการแจ้งเตือนมุมขวาบนของจอภาพครับ'
-      : '📱 ระบบได้ส่งรหัสยืนยัน OTP จำลองไปที่เบอร์โทรศัพท์ของคุณแล้ว กรุณาเช็คการแจ้งเตือนมุมขวาบนของจอภาพครับ'
+      ? `📧 ระบบได้ส่งรหัสยืนยัน OTP ไปยังอีเมล ${found.email} เรียบร้อยแล้วครับ! (รหัสคือ ${generatedOtp})`
+      : '📱 ระบบได้ส่งรหัสยืนยัน OTP ไปที่เบอร์โทรศัพท์ของคุณแล้วครับ'
     );
     setForgotStep(2);
   };

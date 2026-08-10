@@ -436,3 +436,13 @@ export async function markChatRead(userEmail: string) {
     data: { unread: false }
   });
 }
+
+// --- Mailer Actions ---
+import { sendOtpEmail, sendEmail } from '@/lib/mailer';
+
+export async function sendOtpAction(email: string, otpCode: string) {
+  if (!email || !email.includes('@')) {
+    return { success: false, error: 'อีเมลไม่ถูกต้อง' };
+  }
+  return await sendOtpEmail(email, otpCode);
+}
