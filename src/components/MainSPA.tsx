@@ -3372,7 +3372,7 @@ export default function MainSPA({ initialPage = 'home' }: { initialPage?: 'home'
                               </svg>
                             </div>
                             <div>
-                              <p className="font-bold text-stone-800">เบอร์โทรศัพท์: <span className="text-[#166534]">089-123-4567</span></p>
+                              <p className="font-bold text-stone-800">เบอร์โทรศัพท์: <span className="text-[#166534]">065-469-5103</span></p>
                               <p className="text-stone-500 text-[10px]">ชื่อบัญชี: สวนครอบครัว Maiv Zev (ยายมี)</p>
                             </div>
                           </div>
