@@ -8,14 +8,15 @@ import { useAuth } from '@/providers/AuthProvider';
 import { useRef } from 'react';
 import { Product, Order, UserProfile, Category, ProductReview, OrderItem } from '@/types';
 import { getDashboardStats, getProducts, createProduct, updateProduct, deleteProduct, getCategories, createCategory, updateCategory, deleteCategory, getOrders, updateOrderStatus, getUsers, updateUserRole, deleteUser, createUser, updateUser } from '@/app/admin/actions';
-import { uploadFile, getChats, sendMessage, markChatRead } from '@/app/actions';
+import { uploadFile, getChats, sendMessage, markChatRead, sendEmail } from '@/app/actions';
 import LoginModal from '@/components/modals/LoginModal';
+import RichTextEditor from '@/components/admin/RichTextEditor';
 
 export default function AdminPanel() {
   const { currentUser, isLoaded } = useAuth();
   const [isLoginModalOpen, setIsLoginModalOpen] = useState(false);
   
-  const [adminTab, setAdminTab] = useState<'dashboard' | 'products' | 'categories' | 'orders' | 'members' | 'payments' | 'chats'>('dashboard');
+  const [adminTab, setAdminTab] = useState<'dashboard' | 'products' | 'categories' | 'orders' | 'members' | 'payments' | 'chats' | 'emails'>('dashboard');
   
   // Dashboard states
   const [dashboardPeriod, setDashboardPeriod] = useState<'daily' | 'monthly' | 'yearly'>('daily');
@@ -53,6 +54,30 @@ export default function AdminPanel() {
   const [selectedMemberOrders, setSelectedMemberOrders] = useState<any | null>(null);
   const [viewingSlipUrl, setViewingSlipUrl] = useState<string | null>(null);
   const adminChatEndRef = useRef<HTMLDivElement>(null);
+
+  const [emailForm, setEmailForm] = useState({
+    to: '',
+    subject: '',
+    html: ''
+  });
+  
+  const emailTemplates = [
+    {
+      name: 'ยืนยันคำสั่งซื้อ',
+      subject: 'ยืนยันการสั่งซื้อสินค้าจากสวนของเรา',
+      html: `<h2>ขอบคุณที่สั่งซื้อสินค้าครับ! 🍇</h2><p>เราได้รับคำสั่งซื้อของคุณเรียบร้อยแล้วและกำลังเตรียมการจัดส่ง</p><p>หากมีข้อสงสัยสามารถติดต่อเราได้ตลอดเวลาครับ</p><br><p>ขอบคุณครับ<br>ทีมงานสวน</p>`
+    },
+    {
+      name: 'แจ้งการจัดส่ง',
+      subject: 'สินค้าของคุณกำลังเดินทางไปหาคุณ!',
+      html: `<h2>สินค้าของคุณถูกจัดส่งแล้ว 📦</h2><p>เราได้ทำการจัดส่งสินค้าให้คุณเรียบร้อยแล้ว คาดว่าจะถึงมือคุณใน 1-2 วันครับ</p><p>ขอบคุณที่อุดหนุนครับ</p>`
+    },
+    {
+      name: 'โปรโมชั่นพิเศษ',
+      subject: '🔥 โปรโมชั่นพิเศษเฉพาะคุณ!',
+      html: `<h2>ห้ามพลาด! โปรโมชั่นพิเศษ 🎁</h2><p>พิเศษสำหรับคุณลูกค้าคนสำคัญ รับส่วนลดในการสั่งซื้อครั้งต่อไป</p><p>รีบมาใช้สิทธิ์กันนะครับ</p>`
+    }
+  ];
 
   const handleUserSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -379,6 +404,14 @@ export default function AdminPanel() {
                       {(Object.values(chatThreads) as any[]).filter(t => t.unread).length}
                     </span>
                   )}
+                </button>
+
+                <button
+                  onClick={() => setAdminTab('emails')}
+                  className={`w-full text-left px-4 py-3.5 rounded-2xl font-bold text-sm transition-all flex items-center gap-3 ${adminTab === 'emails' ? 'bg-purple-50 text-purple-700 border-l-4 border-purple-600' : 'text-stone-600 hover:bg-stone-50'
+                    }`}
+                >
+                  <span>📧</span> ส่งอีเมลแจ้งเตือน
                 </button>
               </div>
 
@@ -1449,6 +1482,84 @@ export default function AdminPanel() {
                         )}
                       </div>
                     </div>
+                  </div>
+                )}
+
+                {/* 7. EMAILS TAB */}
+                {adminTab === 'emails' && (
+                  <div className="space-y-6 animate-in fade-in duration-300">
+                    <div>
+                      <h3 className="text-xl font-bold text-stone-900">📧 ส่งอีเมลแจ้งเตือน (Email Notifications)</h3>
+                      <p className="text-sm text-stone-500 font-medium">ส่งอีเมลไปยังสมาชิกหรือลูกค้าในระบบ</p>
+                    </div>
+                    <form
+                      onSubmit={async (e) => {
+                        e.preventDefault();
+                        const { to, subject, html } = emailForm;
+                        
+                        if (!to || !subject || !html) {
+                          alert('กรุณากรอกข้อมูลให้ครบถ้วน');
+                          return;
+                        }
+                        
+                        try {
+                          const res = await sendEmail({ to, subject, html, text: html.replace(/<[^>]+>/g, '') });
+                          if (res.success) {
+                            alert('ส่งอีเมลสำเร็จแล้ว!');
+                            setEmailForm({ to: '', subject: '', html: '' });
+                          } else {
+                            alert('เกิดข้อผิดพลาดในการส่งอีเมล: ' + res.error);
+                          }
+                        } catch (err: any) {
+                          alert('เกิดข้อผิดพลาด: ' + err.message);
+                        }
+                      }}
+                      className="bg-white rounded-3xl p-6 md:p-8 border border-stone-200/60 shadow-sm space-y-5"
+                    >
+                      {/* Templates Menu */}
+                      <div className="flex flex-wrap items-center gap-2 pb-4 border-b border-stone-100">
+                        <span className="text-xs font-bold text-stone-500 mr-2">เลือกเทมเพลตด่วน:</span>
+                        {emailTemplates.map((tpl, i) => (
+                          <button
+                            key={i}
+                            type="button"
+                            onClick={() => setEmailForm({ ...emailForm, subject: tpl.subject, html: tpl.html })}
+                            className="bg-stone-50 hover:bg-purple-50 text-stone-700 hover:text-purple-700 font-bold text-[11px] px-3 py-1.5 rounded-lg border border-stone-200 hover:border-purple-200 transition-colors"
+                          >
+                            {tpl.name}
+                          </button>
+                        ))}
+                        <button
+                          type="button"
+                          onClick={() => setEmailForm({ ...emailForm, subject: '', html: '' })}
+                          className="bg-stone-50 hover:bg-stone-200 text-stone-500 font-bold text-[11px] px-3 py-1.5 rounded-lg border border-stone-200 transition-colors ml-auto"
+                        >
+                          ล้างค่า (Clear)
+                        </button>
+                      </div>
+
+                      <div>
+                        <label className="block text-xs font-bold text-stone-700 mb-2">ถึง (To): อีเมลผู้รับ</label>
+                        <input type="email" value={emailForm.to} onChange={e => setEmailForm({...emailForm, to: e.target.value})} required placeholder="customer@example.com" className="w-full bg-stone-50 border border-stone-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-purple-600 font-medium text-stone-900" />
+                      </div>
+                      <div>
+                        <label className="block text-xs font-bold text-stone-700 mb-2">หัวข้ออีเมล (Subject)</label>
+                        <input type="text" value={emailForm.subject} onChange={e => setEmailForm({...emailForm, subject: e.target.value})} required placeholder="แจ้งโปรโมชั่น หรือ สถานะคำสั่งซื้อ..." className="w-full bg-stone-50 border border-stone-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-purple-600 font-medium text-stone-900" />
+                      </div>
+                      <div>
+                        <label className="block text-xs font-bold text-stone-700 mb-2">เนื้อหาอีเมล (Rich Text)</label>
+                        <RichTextEditor 
+                          value={emailForm.html} 
+                          onChange={(html) => setEmailForm({...emailForm, html})} 
+                          placeholder="พิมพ์เนื้อหาอีเมลที่นี่ หรือเลือกจากเทมเพลตด้านบน..."
+                        />
+                      </div>
+                      <div className="pt-4 border-t border-stone-100 flex justify-end">
+                        <button type="submit" className="bg-purple-600 hover:bg-purple-700 text-white font-extrabold px-8 py-3.5 rounded-2xl text-sm transition-all cursor-pointer shadow-md hover:shadow-lg flex items-center gap-2">
+                          <span>📧</span> ยืนยันส่งอีเมล
+                        </button>
+                      </div>
+                    </form>
                   </div>
                 )}
 

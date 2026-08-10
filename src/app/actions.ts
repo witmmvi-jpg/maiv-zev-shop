@@ -5,6 +5,7 @@ import { supabase } from '@/lib/supabase';
 import { mkdir, writeFile } from 'fs/promises';
 import path from 'path';
 import { randomUUID } from 'crypto';
+import nodemailer from 'nodemailer';
 
 export async function uploadFile(formData: FormData): Promise<{ url: string }> {
   const file = formData.get('file');
@@ -438,11 +439,16 @@ export async function markChatRead(userEmail: string) {
 }
 
 // --- Mailer Actions ---
-import { sendOtpEmail, sendEmail } from '@/lib/mailer';
+import { sendOtpEmail, sendEmail as sendEmailMailer } from '@/lib/mailer';
 
 export async function sendOtpAction(email: string, otpCode: string) {
   if (!email || !email.includes('@')) {
     return { success: false, error: 'อีเมลไม่ถูกต้อง' };
   }
   return await sendOtpEmail(email, otpCode);
+}
+
+// --- Email Actions ---
+export async function sendEmail(data: { to: string; subject: string; text?: string; html?: string }) {
+  return await sendEmailMailer(data);
 }
