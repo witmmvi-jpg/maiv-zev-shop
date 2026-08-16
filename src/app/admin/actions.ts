@@ -16,7 +16,7 @@ export async function getDashboardStats() {
 
 // Product Actions
 export async function getProducts() {
-  const products = await prisma.product.findMany({ orderBy: { product_id: 'desc' } });
+  const products = await prisma.product.findMany({ orderBy: { product_id: 'asc' } });
   return products.map(p => ({
     id: p.product_id,
     name: p.product_name,

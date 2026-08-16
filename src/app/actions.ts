@@ -110,7 +110,7 @@ export async function getArticles() {
 }
 
 export async function getProducts() {
-  const products = await prisma.product.findMany({ orderBy: { product_id: 'desc' } });
+  const products = await prisma.product.findMany({ orderBy: { product_id: 'asc' } });
   return products.map(p => ({
     id: p.product_id.toString(),
     name: p.product_name,
