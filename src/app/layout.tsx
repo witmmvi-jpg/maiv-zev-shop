@@ -29,6 +29,8 @@ import CartProvider from "@/providers/CartProvider";
 import ModalAlertProvider from "@/providers/ModalAlertProvider";
 import Navbar from "@/components/layout/Navbar";
 import Footer from "@/components/layout/Footer";
+import NavigationLoader from "@/components/layout/NavigationLoader";
+import { Suspense } from "react";
 
 export default function RootLayout({
   children,
@@ -41,6 +43,9 @@ export default function RootLayout({
         <AuthProvider>
           <ModalAlertProvider>
             <CartProvider>
+              <Suspense fallback={null}>
+                <NavigationLoader />
+              </Suspense>
               <Navbar />
               <main className="flex-1 flex flex-col">{children}</main>
               <Footer />

@@ -13,6 +13,7 @@ interface LoginModalProps {
 export default function LoginModal({ onClose }: LoginModalProps) {
   const { login } = useAuth();
   const [modalMode, setModalMode] = useState<'login' | 'signup' | 'forgot_password'>('login');
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   const [loginEmail, setLoginEmail] = useState('');
   const [loginPassword, setLoginPassword] = useState('');
@@ -36,6 +37,7 @@ export default function LoginModal({ onClose }: LoginModalProps) {
 
   const handleLoginSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    setIsSubmitting(true);
     try {
       const allUsers = await getUsers();
       const target = loginEmail.trim().toLowerCase();
@@ -52,6 +54,8 @@ export default function LoginModal({ onClose }: LoginModalProps) {
       }
     } catch (err: any) {
       alert(err.message || "เข้าสู่ระบบไม่สำเร็จ");
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
@@ -279,7 +283,19 @@ export default function LoginModal({ onClose }: LoginModalProps) {
                 </div>
                 <input type="password" required value={loginPassword} onChange={(e) => setLoginPassword(e.target.value)} placeholder="กรอกรหัสผ่านของคุณ" className="w-full bg-stone-50 border border-stone-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-emerald-600 font-semibold text-stone-850" />
               </div>
-              <button type="submit" className="w-full bg-[#166534] hover:bg-emerald-800 text-white font-extrabold py-3.5 rounded-xl transition-all shadow-md mt-6 cursor-pointer">เข้าสู่ระบบ</button>
+              <button disabled={isSubmitting} type="submit" className="w-full bg-[#166534] hover:bg-emerald-800 disabled:opacity-70 text-white font-extrabold py-3.5 rounded-xl transition-all shadow-md mt-6 cursor-pointer flex items-center justify-center gap-2">
+                {isSubmitting ? (
+                  <>
+                    <svg className="animate-spin h-4 w-4 text-white" fill="none" viewBox="0 0 24 24">
+                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+                    </svg>
+                    <span>กำลังเข้าสู่ระบบ...</span>
+                  </>
+                ) : (
+                  <span>เข้าสู่ระบบ</span>
+                )}
+              </button>
             </form>
           ) : (
             <form onSubmit={handleSignupSubmit} className="space-y-4">

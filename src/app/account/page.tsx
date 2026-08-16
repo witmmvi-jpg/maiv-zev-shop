@@ -256,9 +256,15 @@ export default function AccountPage() {
                 </div>
 
                 {isLoading ? (
-                  <div className="text-center py-16 space-y-3">
-                    <div className="w-10 h-10 border-4 border-emerald-600 border-t-transparent rounded-full animate-spin mx-auto" />
-                    <p className="text-xs text-stone-500 font-semibold">กำลังโหลดข้อมูลประวัติการสั่งซื้อ...</p>
+                  <div className="text-center py-16 space-y-4 bg-stone-50/60 rounded-3xl border border-stone-100">
+                    <div className="relative w-14 h-14 mx-auto flex items-center justify-center">
+                      <div className="absolute inset-0 rounded-full border-4 border-emerald-100 border-t-emerald-600 border-r-emerald-500 animate-spin" />
+                      <div className="text-xl animate-bounce">📦</div>
+                    </div>
+                    <div>
+                      <p className="text-sm font-bold text-stone-800">กำลังโหลดประวัติการสั่งซื้อของคุณ...</p>
+                      <p className="text-xs text-stone-500 font-medium mt-0.5">กรุณารอสักครู่ ระบบกำลังดึงข้อมูลล่าสุดจากเซิร์ฟเวอร์</p>
+                    </div>
                   </div>
                 ) : filteredOrders.length === 0 ? (
                   <div className="text-center py-16 text-stone-400 font-semibold space-y-3 bg-stone-50/50 rounded-2xl border border-dashed border-stone-200">
