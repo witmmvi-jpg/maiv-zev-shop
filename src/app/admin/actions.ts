@@ -80,7 +80,7 @@ export async function deleteProduct(id: number) {
 
 // Category Actions
 export async function getCategories() {
-  const categories = await prisma.category.findMany({ orderBy: { category_id: 'desc' } });
+  const categories = await prisma.category.findMany({ orderBy: { category_id: 'asc' } });
   return categories.map(c => ({
     id: c.category_id,
     name: c.name,

@@ -358,7 +358,7 @@ export async function deleteProduct(id: string) {
 
 // --- Category Actions ---
 export async function getCategories() {
-  return await prisma.category.findMany({ orderBy: { category_id: 'desc' } });
+  return await prisma.category.findMany({ orderBy: { category_id: 'asc' } });
 }
 
 export async function createCategory(data: { name: string; description: string; image: string; gradient: string; badgeColor: string }) {

@@ -370,20 +370,20 @@ export default function MainSPA({ initialPage = 'home' }: { initialPage?: 'home'
   // Category State & Forms (moved up to avoid temporal dead zone)
   const initialCategories: Category[] = [
     {
-      id: 'rice',
-      name: 'ข้าวสาร',
-      description: 'ข้าวหอมมะลิ ข้าวเหนียว คุณภาพระดับพรีเมียม คัดสรรจากธรรมชาติ ปลอดสารเคมี 100%',
-      image: '/images/jasmine_rice.png',
-      gradient: 'from-amber-500/10 to-emerald-500/10 hover:from-amber-500/20 hover:to-emerald-500/20',
-      badgeColor: 'bg-amber-100 text-amber-800 border-amber-200',
-    },
-    {
       id: 'fruit',
       name: 'ผลไม้สด',
       description: 'องุ่นไร้เมล็ด องุ่นแดงหวานกรอบ ปลูกและคัดสรรพิเศษ ปลอดภัย สดใหม่จากสวนคุณยาย',
       image: '/images/red_grapes.png',
       gradient: 'from-purple-500/10 to-pink-500/10 hover:from-purple-500/20 hover:to-purple-500/20',
       badgeColor: 'bg-purple-100 text-purple-800 border-purple-200',
+    },
+    {
+      id: 'rice',
+      name: 'ข้าวสาร',
+      description: 'ข้าวหอมมะลิ ข้าวเหนียว คุณภาพระดับพรีเมียม คัดสรรจากธรรมชาติ ปลอดสารเคมี 100%',
+      image: '/images/jasmine_rice.png',
+      gradient: 'from-amber-500/10 to-emerald-500/10 hover:from-amber-500/20 hover:to-emerald-500/20',
+      badgeColor: 'bg-amber-100 text-amber-800 border-amber-200',
     }
   ];
 
