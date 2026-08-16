@@ -214,19 +214,24 @@ export default function AdminPanel() {
   const loadData = async () => {
     setIsAdminDataLoading(true);
     try {
-      const [_products, _categories, _orders, _users] = await Promise.all([
+      // 1. Fetch products & categories fast to unblock UI
+      const [_products, _categories] = await Promise.all([
         getProducts().catch(() => []),
         getCategories().catch(() => []),
-        getOrders().catch(() => []),
-        getUsers().catch(() => []),
       ]);
       setProducts(_products || []);
       setCategories(_categories || []);
+      setIsAdminDataLoading(false);
+
+      // 2. Fetch heavy orders & users in background
+      const [_orders, _users] = await Promise.all([
+        getOrders().catch(() => []),
+        getUsers().catch(() => []),
+      ]);
       setOrders(_orders || []);
       setUsers(_users || []);
     } catch (e) {
       console.error(e);
-    } finally {
       setIsAdminDataLoading(false);
     }
   };

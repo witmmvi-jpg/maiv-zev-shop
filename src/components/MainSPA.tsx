@@ -495,23 +495,24 @@ export default function MainSPA({ initialPage = 'home' }: { initialPage?: 'home'
             setCategories(initialCategories);
           }
         }).catch(e => console.error("Failed to load categories:", e)),
-
-        getOrders().then(dbOrders => {
-          if (dbOrders) {
-            setOrders(dbOrders.map(o => ({ ...o, id: `ORD-${o.id.padStart(3, '0')}` })));
-          }
-        }).catch(e => console.error('Failed to load orders:', e)),
-
-        getReviews().then(dbReviews => {
-          if (dbReviews && dbReviews.length > 0) {
-            setReviews(dbReviews as ProductReview[]);
-          }
-        }).catch(err => {
-          console.error('Error fetching reviews from DB:', err);
-        })
       ]).finally(() => {
         setIsLoaded(true);
         setIsDataLoading(false);
+      });
+
+      // Background secondary fetches
+      getOrders().then(dbOrders => {
+        if (dbOrders) {
+          setOrders(dbOrders.map(o => ({ ...o, id: `ORD-${o.id.padStart(3, '0')}` })));
+        }
+      }).catch(e => console.error('Failed to load orders:', e));
+
+      getReviews().then(dbReviews => {
+        if (dbReviews && dbReviews.length > 0) {
+          setReviews(dbReviews as ProductReview[]);
+        }
+      }).catch(err => {
+        console.error('Error fetching reviews from DB:', err);
       });
 
       // Cart is now managed by Context
