@@ -8,10 +8,18 @@ export default function NavigationLoader() {
   const searchParams = useSearchParams();
   const [isLoading, setIsLoading] = useState(false);
 
-  // Turn off loading indicator when pathname or searchParams change
+  // Turn off loading indicator when pathname or searchParams change, or after fast timeout
   useEffect(() => {
     setIsLoading(false);
   }, [pathname, searchParams]);
+
+  useEffect(() => {
+    if (!isLoading) return;
+    const timer = setTimeout(() => {
+      setIsLoading(false);
+    }, 250);
+    return () => clearTimeout(timer);
+  }, [isLoading]);
 
   // Intercept click on <a> tags to show instant visual feedback
   useEffect(() => {

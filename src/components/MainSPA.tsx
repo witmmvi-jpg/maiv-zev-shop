@@ -217,7 +217,7 @@ export default function MainSPA({ initialPage = 'home' }: { initialPage?: 'home'
     },
   ];
 
-  const [products, setProducts] = useState<Product[]>([]);
+  const [products, setProducts] = useState<Product[]>(initialProducts);
 
   const initialOrders: Order[] = [
     {
@@ -331,7 +331,7 @@ export default function MainSPA({ initialPage = 'home' }: { initialPage?: 'home'
     }
   ];
 
-  const [orders, setOrders] = useState<Order[]>([]);
+  const [orders, setOrders] = useState<Order[]>(initialOrders);
   const [users, setUsers] = useState<UserProfile[]>(mockUsers);
 
   // Local date-time helper functions matching ICT (Thailand) Timezone
@@ -387,7 +387,7 @@ export default function MainSPA({ initialPage = 'home' }: { initialPage?: 'home'
     }
   ];
 
-  const [categories, setCategories] = useState<Category[]>([]);
+  const [categories, setCategories] = useState<Category[]>(initialCategories);
 
   // Reviews & Product Detail states
   const mockReviews: ProductReview[] = [];
@@ -472,48 +472,35 @@ export default function MainSPA({ initialPage = 'home' }: { initialPage?: 'home'
   }, [mockNotification.show]);
 
   // localStorage persistence loaded after mount to avoid hydration mismatch
-  const [isLoaded, setIsLoaded] = useState(false);
-  const [isDataLoading, setIsDataLoading] = useState(true);
+  const [isLoaded, setIsLoaded] = useState(true);
 
   useEffect(() => {
     if (typeof window !== 'undefined') {
-      setIsDataLoading(true);
+      // Async background sync from DB
+      getProducts().then(dbProducts => {
+        if (dbProducts && dbProducts.length > 0) {
+          setProducts(dbProducts.map((p: any) => ({ ...p, id: p.id.toString() })));
+        }
+      }).catch(e => console.error("Failed to load products:", e));
 
-      Promise.allSettled([
-        getOrders().then(dbOrders => {
-          if (dbOrders) {
-            setOrders(dbOrders.map(o => ({ ...o, id: `ORD-${o.id.padStart(3, '0')}` })));
-          }
-        }).catch(e => console.error('Failed to load orders:', e)),
+      getCategories().then(dbCats => {
+        if (dbCats && dbCats.length > 0) {
+          setCategories(dbCats.map((c: any) => ({ ...c, id: c.id.toString() })));
+        }
+      }).catch(e => console.error("Failed to load categories:", e));
 
-        getProducts().then(dbProducts => {
-          if (dbProducts && dbProducts.length > 0) {
-            setProducts(dbProducts.map((p: any) => ({ ...p, id: p.id.toString() })));
-          } else {
-            setProducts(initialProducts);
-          }
-        }).catch(e => console.error("Failed to load products:", e)),
+      getOrders().then(dbOrders => {
+        if (dbOrders) {
+          setOrders(dbOrders.map(o => ({ ...o, id: `ORD-${o.id.padStart(3, '0')}` })));
+        }
+      }).catch(e => console.error('Failed to load orders:', e));
 
-        getCategories().then(dbCats => {
-          if (dbCats && dbCats.length > 0) {
-            setCategories(dbCats.map((c: any) => ({ ...c, id: c.id.toString() })));
-          } else {
-            setCategories(initialCategories);
-          }
-        }).catch(e => console.error("Failed to load categories:", e)),
-
-        getReviews().then(dbReviews => {
-          if (dbReviews && dbReviews.length > 0) {
-            setReviews(dbReviews as ProductReview[]);
-          } else {
-            setReviews([]);
-          }
-        }).catch(err => {
-          console.error('Error fetching reviews from DB:', err);
-        })
-      ]).finally(() => {
-        setIsLoaded(true);
-        setIsDataLoading(false);
+      getReviews().then(dbReviews => {
+        if (dbReviews && dbReviews.length > 0) {
+          setReviews(dbReviews as ProductReview[]);
+        }
+      }).catch(err => {
+        console.error('Error fetching reviews from DB:', err);
       });
 
       // Cart is now managed by Context
@@ -1151,24 +1138,6 @@ export default function MainSPA({ initialPage = 'home' }: { initialPage?: 'home'
 
   return (
     <div className="min-h-screen bg-[#fafaf6] text-stone-800 flex flex-col selection:bg-emerald-500 selection:text-white">
-      {/* Loading Overlay */}
-      {isDataLoading && (
-        <div className="fixed inset-0 z-50 flex flex-col items-center justify-center bg-stone-900/40 backdrop-blur-md transition-all duration-300">
-          <div className="bg-white/95 border border-emerald-100 rounded-3xl p-8 shadow-2xl flex flex-col items-center max-w-xs w-full text-center space-y-4 animate-in zoom-in-95 duration-200">
-            <div className="relative w-16 h-16 flex items-center justify-center">
-              <div className="absolute inset-0 rounded-full border-4 border-emerald-100 border-t-emerald-600 border-r-emerald-500 animate-spin" />
-              <div className="text-2xl animate-bounce">🍇</div>
-            </div>
-            <div>
-              <h3 className="text-base font-bold text-stone-900">กำลังโหลดข้อมูล...</h3>
-              <p className="text-xs text-emerald-700 font-medium mt-1">Maiv Zev Shop สดจากสวน</p>
-            </div>
-            <div className="w-full bg-stone-100 rounded-full h-1.5 overflow-hidden">
-              <div className="bg-gradient-to-r from-emerald-500 to-teal-500 h-full rounded-full animate-pulse w-3/4 transition-all duration-500" />
-            </div>
-          </div>
-        </div>
-      )}
       {/* 1. Header (Navigation Bar) */}
       
 
