@@ -25,37 +25,16 @@ export default function AdminPanel() {
     return `${year}-${month}`;
   };
 
-  const initialProductsFallback = [
-    { id: 1, name: 'องุ่นไร้เมล็ดแดง', description: 'องุ่นไร้เมล็ดแดง หวาน กรอบ สดใหม่จากสวน', price: 120, originalPrice: 150, promotionText: 'ลดราคาพิเศษ', stock: 50, image: '/images/red_grapes.png', unit: 'กก.', category: 'ผลไม้สด' },
-    { id: 2, name: 'องุ่นเขียวไซมัสแคท', description: 'องุ่นเขียวไซมัสแคท หวานหอม มีกลิ่นหอมเฉพาะตัว', price: 250, originalPrice: 300, promotionText: 'สินค้าขายดี', stock: 35, image: '/images/green_grapes.png', unit: 'กก.', category: 'ผลไม้สด' },
-    { id: 3, name: 'ข้าวหอมมะลิสุรินทร์แท้', description: 'ข้าวหอมมะลิแท้ 100% หอม นุ่ม อร่อย คัดเกรดพรีเมียม', price: 40, originalPrice: 45, promotionText: '', stock: 100, image: '/images/jasmine_rice.png', unit: 'กก.', category: 'ข้าวสาร' }
-  ];
-
-  const initialCategoriesFallback = [
-    { id: 1, name: 'ผลไม้สด', description: 'องุ่นสดจากสวน ปลอดสารพิษ หวาน กรอบ อร่อย', image: '/images/red_grapes.png' },
-    { id: 2, name: 'ข้าวสาร', description: 'ข้าวหอมมะลิ ข้าวเหนียว ข้าวกล้อง คุณภาพระดับพรีเมียม', image: '/images/jasmine_rice.png' }
-  ];
-
-  const initialOrdersFallback = [
-    { id: 'ORD-001', username: 'somchai_member', phone: '0898765432', shippingAddress: '123/45 ถนนเจริญนคร กรุงเทพฯ', items: [{ productName: 'องุ่นไร้เมล็ดแดง', quantity: 5, price: 120, unit: 'กก.' }], totalPrice: 600, paymentMethod: 'พร้อมเพย์ (PromptPay)', paymentStatus: 'ชำระเงินแล้ว', orderStatus: 'ส่งสำเร็จ', createdAt: new Date().toISOString(), slipUrl: '/images/slip_demo.png' },
-    { id: 'ORD-002', username: 'sodsai_customer', phone: '0812345678', shippingAddress: '456/78 ถนนสุขุมวิท กรุงเทพฯ', items: [{ productName: 'องุ่นเขียวไซมัสแคท', quantity: 2, price: 250, unit: 'กก.' }], totalPrice: 500, paymentMethod: 'พร้อมเพย์ (PromptPay)', paymentStatus: 'รอตรวจสอบ', orderStatus: 'รอดำเนินการ', createdAt: new Date().toISOString(), slipUrl: '/images/slip_demo.png' }
-  ];
-
-  const initialUsersFallback = [
-    { id: 1, username: 'ยายมี (ผู้ดูแลระบบ)', email: 'admin@maivzev.com', phone: '0654695103', role: 'Admin', profileImage: '/images/logo.png' },
-    { id: 2, username: 'somchai_member', email: 'somchai@example.com', phone: '0898765432', role: 'Member', profileImage: '' },
-    { id: 3, username: 'sodsai_customer', email: 'customer@example.com', phone: '0812345678', role: 'User', profileImage: '' }
-  ];
-
   // Dashboard states
   const [dashboardPeriod, setDashboardPeriod] = useState<'daily' | 'monthly' | 'yearly'>('daily');
   const [bestSellerMonth, setBestSellerMonth] = useState<string>(getLocalYearMonthDynamic());
   
   // DB States
-  const [products, setProducts] = useState<any[]>(initialProductsFallback);
-  const [categories, setCategories] = useState<any[]>(initialCategoriesFallback);
-  const [orders, setOrders] = useState<any[]>(initialOrdersFallback);
-  const [users, setUsers] = useState<any[]>(initialUsersFallback);
+  const [isAdminDataLoading, setIsAdminDataLoading] = useState<boolean>(true);
+  const [products, setProducts] = useState<any[]>([]);
+  const [categories, setCategories] = useState<any[]>([]);
+  const [orders, setOrders] = useState<any[]>([]);
+  const [users, setUsers] = useState<any[]>([]);
   const [reviews, setReviews] = useState<any[]>([]);
   
   // Modals & Form states
@@ -233,19 +212,22 @@ export default function AdminPanel() {
   };
 
   const loadData = async () => {
+    setIsAdminDataLoading(true);
     try {
       const [_products, _categories, _orders, _users] = await Promise.all([
-        getProducts().catch(() => null),
-        getCategories().catch(() => null),
-        getOrders().catch(() => null),
-        getUsers().catch(() => null),
+        getProducts().catch(() => []),
+        getCategories().catch(() => []),
+        getOrders().catch(() => []),
+        getUsers().catch(() => []),
       ]);
-      if (_products && _products.length > 0) setProducts(_products);
-      if (_categories && _categories.length > 0) setCategories(_categories);
-      if (_orders && _orders.length > 0) setOrders(_orders);
-      if (_users && _users.length > 0) setUsers(_users);
+      setProducts(_products || []);
+      setCategories(_categories || []);
+      setOrders(_orders || []);
+      setUsers(_users || []);
     } catch (e) {
       console.error(e);
+    } finally {
+      setIsAdminDataLoading(false);
     }
   };
 
@@ -443,7 +425,16 @@ export default function AdminPanel() {
 
               {/* Tab Contents */}
               <div className="lg:col-span-3 bg-white rounded-3xl p-6 md:p-8 border border-stone-200/60 shadow-sm min-h-[500px]">
-
+                {isAdminDataLoading ? (
+                  <div className="flex flex-col items-center justify-center min-h-[400px] space-y-4 text-center">
+                    <div className="w-10 h-10 border-4 border-purple-600 border-t-transparent rounded-full animate-spin" />
+                    <div>
+                      <h4 className="text-base font-bold text-stone-900">กำลังดึงข้อมูลล่าสุดจากเซิร์ฟเวอร์...</h4>
+                      <p className="text-xs text-stone-500 mt-1">กรุณารอสักครู่ ระบบกำลังประมวลผลข้อมูลแอดมิน</p>
+                    </div>
+                  </div>
+                ) : (
+                  <>
                 {/* 0. SALES DASHBOARD TAB */}
                 {adminTab === 'dashboard' && (
                   <div className="space-y-8 animate-in fade-in duration-300">
@@ -1588,8 +1579,9 @@ export default function AdminPanel() {
                     </form>
                   </div>
                 )}
-
-              </div>
+              </>
+            )}
+          </div>
             </div>
           </div>
 

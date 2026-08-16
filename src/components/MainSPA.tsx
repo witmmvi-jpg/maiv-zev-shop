@@ -217,7 +217,7 @@ export default function MainSPA({ initialPage = 'home' }: { initialPage?: 'home'
     },
   ];
 
-  const [products, setProducts] = useState<Product[]>(initialProducts);
+  const [products, setProducts] = useState<Product[]>([]);
 
   const initialOrders: Order[] = [
     {
@@ -387,7 +387,7 @@ export default function MainSPA({ initialPage = 'home' }: { initialPage?: 'home'
     }
   ];
 
-  const [categories, setCategories] = useState<Category[]>(initialCategories);
+  const [categories, setCategories] = useState<Category[]>([]);
 
   // Reviews & Product Detail states
   const mockReviews: ProductReview[] = [];
@@ -472,35 +472,46 @@ export default function MainSPA({ initialPage = 'home' }: { initialPage?: 'home'
   }, [mockNotification.show]);
 
   // localStorage persistence loaded after mount to avoid hydration mismatch
-  const [isLoaded, setIsLoaded] = useState(true);
+  const [isLoaded, setIsLoaded] = useState(false);
+  const [isDataLoading, setIsDataLoading] = useState(true);
 
   useEffect(() => {
     if (typeof window !== 'undefined') {
-      // Async background sync from DB
-      getProducts().then(dbProducts => {
-        if (dbProducts && dbProducts.length > 0) {
-          setProducts(dbProducts.map((p: any) => ({ ...p, id: p.id.toString() })));
-        }
-      }).catch(e => console.error("Failed to load products:", e));
+      setIsDataLoading(true);
 
-      getCategories().then(dbCats => {
-        if (dbCats && dbCats.length > 0) {
-          setCategories(dbCats.map((c: any) => ({ ...c, id: c.id.toString() })));
-        }
-      }).catch(e => console.error("Failed to load categories:", e));
+      Promise.allSettled([
+        getProducts().then(dbProducts => {
+          if (dbProducts && dbProducts.length > 0) {
+            setProducts(dbProducts.map((p: any) => ({ ...p, id: p.id.toString() })));
+          } else {
+            setProducts(initialProducts);
+          }
+        }).catch(e => console.error("Failed to load products:", e)),
 
-      getOrders().then(dbOrders => {
-        if (dbOrders) {
-          setOrders(dbOrders.map(o => ({ ...o, id: `ORD-${o.id.padStart(3, '0')}` })));
-        }
-      }).catch(e => console.error('Failed to load orders:', e));
+        getCategories().then(dbCats => {
+          if (dbCats && dbCats.length > 0) {
+            setCategories(dbCats.map((c: any) => ({ ...c, id: c.id.toString() })));
+          } else {
+            setCategories(initialCategories);
+          }
+        }).catch(e => console.error("Failed to load categories:", e)),
 
-      getReviews().then(dbReviews => {
-        if (dbReviews && dbReviews.length > 0) {
-          setReviews(dbReviews as ProductReview[]);
-        }
-      }).catch(err => {
-        console.error('Error fetching reviews from DB:', err);
+        getOrders().then(dbOrders => {
+          if (dbOrders) {
+            setOrders(dbOrders.map(o => ({ ...o, id: `ORD-${o.id.padStart(3, '0')}` })));
+          }
+        }).catch(e => console.error('Failed to load orders:', e)),
+
+        getReviews().then(dbReviews => {
+          if (dbReviews && dbReviews.length > 0) {
+            setReviews(dbReviews as ProductReview[]);
+          }
+        }).catch(err => {
+          console.error('Error fetching reviews from DB:', err);
+        })
+      ]).finally(() => {
+        setIsLoaded(true);
+        setIsDataLoading(false);
       });
 
       // Cart is now managed by Context
@@ -2709,7 +2720,15 @@ export default function MainSPA({ initialPage = 'home' }: { initialPage?: 'home'
           {/* 4. Best Sellers Section */}
           {activePage === 'products' && (
             <section id="products-section" className="py-16 md:py-24 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex-1 animate-in fade-in duration-300">
-              {selectedCategory === null ? (
+              {isDataLoading ? (
+                <div className="flex flex-col items-center justify-center min-h-[350px] space-y-4 text-center">
+                  <div className="w-10 h-10 border-4 border-emerald-600 border-t-transparent rounded-full animate-spin" />
+                  <div>
+                    <h4 className="text-base font-bold text-stone-900">กำลังโหลดรายการสินค้าและหมวดหมู่...</h4>
+                    <p className="text-xs text-stone-500 mt-1">กรุณารอสักครู่ ระบบกำลังดึงข้อมูลล่าสุดจากสวน</p>
+                  </div>
+                </div>
+              ) : selectedCategory === null ? (
                 <div>
                   <div className="text-center space-y-4 mb-16">
                     <h3 className="text-3xl font-extrabold text-stone-900 relative inline-block pb-3">
