@@ -3131,7 +3131,7 @@ export default function MainSPA({ initialPage = 'home' }: { initialPage?: 'home'
 
                     {/* LINE */}
                     <a
-                      href="https://line.me/R/ti/p/@suankrobkrua"
+                      href="https://line.me/ti/p/5w0a27CVI3"
                       target="_blank"
                       rel="noopener noreferrer"
                       className="group flex items-center gap-5 p-5 rounded-2xl bg-stone-50 hover:bg-[#06c755]/5 border border-stone-100 hover:border-[#06c755]/20 transition-all duration-300 shadow-sm"
@@ -3142,14 +3142,14 @@ export default function MainSPA({ initialPage = 'home' }: { initialPage?: 'home'
                       <div>
                         <div className="text-[10px] text-stone-400 font-bold uppercase tracking-wider">LINE ID</div>
                         <div className="text-lg font-extrabold text-stone-800 group-hover:text-[#05b04b] transition-colors">
-                          @suankrobkrua
+                          0907547548
                         </div>
                       </div>
                     </a>
 
                     {/* Facebook */}
                     <a
-                      href="https://facebook.com"
+                      href="https://www.facebook.com/share/1DLqnxzo2t/"
                       target="_blank"
                       rel="noopener noreferrer"
                       className="group flex items-center gap-5 p-5 rounded-2xl bg-stone-50 hover:bg-blue-50 border border-stone-100 hover:border-blue-200 transition-all duration-300 shadow-sm"
@@ -3160,9 +3160,9 @@ export default function MainSPA({ initialPage = 'home' }: { initialPage?: 'home'
                         </svg>
                       </div>
                       <div>
-                        <div className="text-[10px] text-stone-400 font-bold uppercase tracking-wider">Facebook Page</div>
+                        <div className="text-[10px] text-stone-400 font-bold uppercase tracking-wider">Facebook </div>
                         <div className="text-lg font-extrabold text-stone-800 group-hover:text-blue-800 transition-colors">
-                          สวนครอบครัวเรา
+                          ชาติชาย วงศ์นภาวิเศษ
                         </div>
                       </div>
                     </a>
