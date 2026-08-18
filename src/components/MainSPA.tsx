@@ -3113,7 +3113,7 @@ export default function MainSPA({ initialPage = 'home' }: { initialPage?: 'home'
 
                     {/* Phone */}
                     <a
-                      href="tel:0812345678"
+                      href="tel:0654695103"
                       className="group flex items-center gap-5 p-5 rounded-2xl bg-stone-50 hover:bg-emerald-50/60 border border-stone-100 hover:border-emerald-200 transition-all duration-300 shadow-sm"
                     >
                       <div className="w-14 h-14 bg-white text-emerald-700 rounded-full flex items-center justify-center border-2 border-emerald-500 shadow-sm group-hover:scale-105 transition-transform duration-300">
