@@ -134,6 +134,16 @@ export async function getOrders() {
       orderDetails: { include: { product: true } },
     },
   });
+
+  let rawRefundSlips: { order_id: number; refund_slip_url: string | null }[] = [];
+  try {
+    rawRefundSlips = await prisma.$queryRaw`SELECT order_id, refund_slip_url FROM orders`;
+  } catch (err) {
+    console.warn('Raw SQL refund_slip_url fetch warning:', err);
+  }
+  const refundMap = new Map<number, string | null>();
+  rawRefundSlips.forEach(r => refundMap.set(r.order_id, r.refund_slip_url));
+
   return orders.map(o => ({
     id: o.order_id.toString(),
     username: o.user?.username || 'ไม่ทราบชื่อ',
@@ -151,16 +161,38 @@ export async function getOrders() {
     orderStatus: o.order_status,
     createdAt: o.created_at ? o.created_at.toISOString() : new Date(0).toISOString(),
     slipUrl: o.slip_url || undefined,
+    refundSlipUrl: (refundMap.get(o.order_id) || (o as any).refund_slip_url) || undefined,
   }));
 }
 
-export async function updateOrderStatus(id: string, data: { paymentStatus?: string; orderStatus?: string }) {
-  const updateData: any = {};
-  if (data.paymentStatus) updateData.payment_status = data.paymentStatus;
-  if (data.orderStatus) updateData.order_status = data.orderStatus;
-  await prisma.order.update({ where: { order_id: parseInt(id, 10) }, data: updateData });
+export async function updateOrderStatus(id: string, data: { paymentStatus?: string; orderStatus?: string; refundSlipUrl?: string }) {
+  const orderId = parseInt(id.replace(/[^0-9]/g, ''), 10);
+  if (isNaN(orderId)) return { success: false };
+
+  try {
+    const updateData: any = {};
+    if (data.paymentStatus) updateData.payment_status = data.paymentStatus;
+    if (data.orderStatus) updateData.order_status = data.orderStatus;
+    if (data.refundSlipUrl !== undefined) updateData.refund_slip_url = data.refundSlipUrl;
+    await prisma.order.update({ where: { order_id: orderId }, data: updateData });
+  } catch (err: any) {
+    console.warn('Prisma Client validation error detected, performing raw SQL update fallback:', err?.message);
+    if (data.refundSlipUrl !== undefined && data.paymentStatus) {
+      await prisma.$executeRaw`UPDATE orders SET payment_status = ${data.paymentStatus}, refund_slip_url = ${data.refundSlipUrl} WHERE order_id = ${orderId}`;
+    } else if (data.refundSlipUrl !== undefined) {
+      await prisma.$executeRaw`UPDATE orders SET refund_slip_url = ${data.refundSlipUrl} WHERE order_id = ${orderId}`;
+    } else if (data.paymentStatus && data.orderStatus) {
+      await prisma.$executeRaw`UPDATE orders SET payment_status = ${data.paymentStatus}, order_status = ${data.orderStatus} WHERE order_id = ${orderId}`;
+    } else if (data.paymentStatus) {
+      await prisma.$executeRaw`UPDATE orders SET payment_status = ${data.paymentStatus} WHERE order_id = ${orderId}`;
+    } else if (data.orderStatus) {
+      await prisma.$executeRaw`UPDATE orders SET order_status = ${data.orderStatus} WHERE order_id = ${orderId}`;
+    }
+  }
+
   revalidatePath('/admin');
   revalidatePath('/');
+  revalidatePath('/account');
   return { success: true };
 }
 

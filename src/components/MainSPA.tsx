@@ -1,11 +1,12 @@
 'use client';
 
 import { useState, useEffect, useRef } from 'react';
+import Link from 'next/link';
 import { useAuth } from '@/providers/AuthProvider';
 import { useCart } from '@/providers/CartProvider';
 import Image from 'next/image';
 import { getProducts, getCategories } from '@/app/admin/actions';
-import { uploadFile, getUsers, createUser, updateUser, createOrder, getOrders, getChats, sendMessage, markChatRead, sendOtpAction, getReviews, createReview } from '@/app/actions';
+import { uploadFile, getUsers, createUser, updateUser, createOrder, updateOrder, getOrders, getChats, sendMessage, markChatRead, sendOtpAction, getReviews, createReview } from '@/app/actions';
 import { compressImage } from '@/lib/imageCompressor';
 
 interface Product {
@@ -71,10 +72,11 @@ interface Order {
   items: OrderItem[];
   totalPrice: number;
   paymentMethod: string;
-  paymentStatus: 'รอตรวจสอบ' | 'ชำระเงินแล้ว' | 'ล้มเหลว';
+  paymentStatus: 'รอตรวจสอบ' | 'ชำระเงินแล้ว' | 'ล้มเหลว' | 'คืนเงินสำเร็จ';
   orderStatus: 'รอดำเนินการ' | 'กำลังจัดส่ง' | 'ส่งสำเร็จ' | 'ยกเลิก';
   createdAt: string;
   slipUrl?: string;
+  refundSlipUrl?: string;
 }
 
 interface ChatMessage {
@@ -429,6 +431,12 @@ export default function MainSPA({ initialPage = 'home' }: { initialPage?: 'home'
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [activePage, setActivePage] = useState<'home' | 'products' | 'delivery' | 'contact' | 'articles'>(initialPage as any);
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (initialPage) {
+      setActivePage(initialPage as any);
+    }
+  }, [initialPage]);
   const { currentUser, login: setCurrentUser, logout } = useAuth(); // setCurrentUser maps to login for backward compat
   const [isUserDropdownOpen, setIsUserDropdownOpen] = useState(false);
 
@@ -829,6 +837,7 @@ export default function MainSPA({ initialPage = 'home' }: { initialPage?: 'home'
   const [checkoutStep, setCheckoutStep] = useState<1 | 2>(1);
   const [isPlacingOrder, setIsPlacingOrder] = useState(false);
   const [selectedMemberOrders, setSelectedMemberOrders] = useState<UserProfile | null>(null);
+  const [isUploadingRefund, setIsUploadingRefund] = useState(false);
 
   // Chatbot states
   const [isChatOpen, setIsChatOpen] = useState(false);
@@ -942,6 +951,61 @@ export default function MainSPA({ initialPage = 'home' }: { initialPage?: 'home'
 
   const getBotResponse = (input: string, isLoggedIn: boolean): string => {
     const query = input.trim().toLowerCase();
+
+    // 1. Order Status Queries (แสดงเฉพาะสถานะที่ยังไม่สำเร็จ พร้อมรูปสินค้าขนาดพอดี)
+    if (query.includes('สถานะ') || query.includes('ติดตาม') || query.includes('พัสดุ') || query.includes('ออเดอร์') || query.includes('คำสั่งซื้อ') || query.includes('เช็คสินค้า')) {
+      if (!isLoggedIn || !currentUser) {
+        return 'กรุณาเข้าสู่ระบบก่อนครับ เพื่อให้ระบบแสดงรายการและสถานะคำสั่งซื้อของคุณ หรือระบุเลขคำสั่งซื้อ (เช่น ORD-001) ให้แอดมินทางแชทนี้ได้เลยครับ! 🔑';
+      }
+
+      const myOrders = orders.filter(o => o.username === currentUser.username);
+      // แสดงเฉพาะสถานะที่ยังไม่สำเร็จ (ส่งสำเร็จ และ ยกเลิก/ล้มเหลว จะไม่ขึ้น)
+      const activeUnfinishedOrders = myOrders.filter(o => o.orderStatus !== 'ส่งสำเร็จ' && o.orderStatus !== 'ยกเลิก' && o.paymentStatus !== 'ล้มเหลว');
+
+      if (activeUnfinishedOrders.length === 0) {
+        return 'ขณะนี้คุณไม่มีรายการสั่งซื้อที่อยู่ระหว่างดำเนินการครับ (รายการที่จัดส่งสำเร็จหรือยกเลิกแล้วจะไม่แสดงในหน้านี้) หากต้องการสั่งซื้อสินค้าเพิ่ม สามารถเลือกชมสินค้าได้ที่เมนู "สินค้า" ด้านบนได้เลยครับ 🍇🌾';
+      }
+
+      const orderListText = activeUnfinishedOrders.map(o => {
+        const itemDetails = o.items.map(i => {
+          const matchedProd = products.find(p => p.name === i.productName || p.name.includes(i.productName));
+          const imgUrl = matchedProd?.image || '/images/logo.png';
+          return `\n  [img: ${imgUrl}] ${i.productName} (x${i.quantity} ${i.unit})`;
+        }).join('');
+
+        return `📦 **คำสั่งซื้อ #${o.id}** (${o.totalPrice} บาท)\n• การชำระเงิน: ${o.paymentStatus}\n• การจัดส่ง: ${o.orderStatus}\n• สินค้าที่สั่ง:${itemDetails}`;
+      }).join('\n\n');
+
+      return `📦 **รายการคำสั่งซื้อที่อยู่ระหว่างดำเนินการของคุณ (${currentUser.username}):**\n\n${orderListText}\n\n💡 หากต้องการยกเลิกรายการที่มีสถานะ "รอดำเนินการ" สามารถพิมพ์บอกแอดมิน (เช่น "ขอยกเลิก ${activeUnfinishedOrders[0]?.id}") ในแชทนี้ได้เลยครับ! 😊`;
+    }
+
+    // 2. Order Cancellation Queries & Instructions
+    if (query.includes('ยกเลิก') || query.includes('ขอยกเลิก') || query.includes('วิธีขอยกเลิก') || query.includes('ล้มเหลว') || query.includes('cancel')) {
+      const orderIdMatch = query.match(/(ord-\d+|\d+)/i);
+      if (orderIdMatch) {
+        const rawId = orderIdMatch[0].toUpperCase();
+        const numericId = rawId.replace(/[^0-9]/g, '');
+        const targetOrder = orders.find(o => o.id === rawId || o.id.replace(/[^0-9]/g, '') === numericId);
+
+        if (targetOrder) {
+          if (targetOrder.orderStatus === 'ยกเลิก' || targetOrder.paymentStatus === 'ล้มเหลว') {
+            return `คำสั่งซื้อ #${targetOrder.id} ได้ถูกยกเลิก (ล้มเหลว) เรียบร้อยแล้วก่อนหน้านี้ครับ ❌`;
+          }
+
+          if (targetOrder.orderStatus !== 'รอดำเนินการ') {
+            return `ขออภัยครับ คำสั่งซื้อ #${targetOrder.id} มีสถานะเป็น "${targetOrder.orderStatus}" ไม่สามารถยกเลิกได้แล้วครับ (ระบบอนุญาตให้ยกเลิกได้เฉพาะคำสั่งซื้อที่มีสถานะ "รอดำเนินการ" เท่านั้น) ⚠️`;
+          }
+
+          updateOrder(targetOrder.id, { paymentStatus: 'ล้มเหลว', orderStatus: 'ยกเลิก' }).catch(err => console.error('Error cancelling via bot:', err));
+          setOrders(prev => prev.map(o => o.id === targetOrder.id || o.id.replace(/[^0-9]/g, '') === numericId ? { ...o, paymentStatus: 'ล้มเหลว', orderStatus: 'ยกเลิก' } : o));
+
+          return `❌ ระบบได้ดำเนินการเปลี่ยนสถานะคำสั่งซื้อ #${targetOrder.id} เป็น "ยกเลิก (ล้มเหลว)" เรียบร้อยแล้วครับ!\n\nหากท่านโอนชำระเงินแล้วและต้องการขอคืนเงิน กรุณาแจ้งหมายเลขบัญชีและชื่อบัญชีให้แอดมินในแชทนี้เพื่อให้แอดมินดำเนินการโอนคืนให้ครับ 🙏`;
+        }
+      }
+
+      // If user asks how to cancel or clicks cancel quick action without order ID
+      return `💡 **วิธีการและขั้นตอนการขอยกเลิกคำสั่งซื้อ:**\n\n1️⃣ **ขอยกเลิกผ่านแชทนี้:**\n   • พิมพ์ระบุ *"ขอยกเลิก [เลขคำสั่งซื้อ]"* เช่น \`ขอยกเลิก ORD-001\` ทางแชทนี้ได้ทันที\n\n2️⃣ **ขอยกเลิกผ่านหน้าประวัติการสั่งซื้อ:**\n   • กดรูปโปรไฟล์มุมขวาบน ➔ เลือก **"ประวัติการสั่งซื้อ"**\n   • ในรายการคำสั่งซื้อของคุณ ➔ กดปุ่ม **"🚫 ยกเลิกคำสั่งซื้อ"**\n\n⚠️ *หมายเหตุ: ระบบอนุญาตให้ยกเลิกได้เฉพาะคำสั่งซื้อที่มีสถานะ "รอดำเนินการ" เท่านั้นครับ หากต้องการขอคืนเงินสามารถพิมพ์แจ้งเลขบัญชีในแชทนี้ได้เลยครับ* 😊`;
+    }
 
     if (query.includes('วิธีเข้าสู่ระบบ') || query.includes('สมัครสมาชิก') || query.includes('ล็อกอิน') || query.includes('login') || query.includes('register') || query.includes('เข้าสู่ระบบ')) {
       return 'สำหรับการเข้าสู่ระบบหรือสมัครสมาชิก คุณสามารถกดที่ไอคอนรูปโปรไฟล์ที่มุมขวาบนของหน้าจอได้เลยครับ! หากยังไม่มีบัญชีให้เลือกแท็บ "สมัครสมาชิก" และกรอกข้อมูล (ชื่อ, อีเมล, รหัสผ่าน, เบอร์โทร) จากนั้นสามารถทำการล็อกอินและสั่งซื้อสินค้าได้ทันทีครับ 🔑';
@@ -2585,7 +2649,7 @@ export default function MainSPA({ initialPage = 'home' }: { initialPage?: 'home'
 
                     {selectedOrder.slipUrl && (
                       <div className="pt-2.5 border-t border-stone-150 space-y-1.5">
-                        <p className="text-[11px] text-stone-400 font-medium">หลักฐานการโอนเงิน (สลิป):</p>
+                        <p className="text-[11px] text-stone-400 font-medium">หลักฐานการโอนเงินลูกค้า (สลิป):</p>
                         <div className="relative group w-36 h-48 rounded-xl overflow-hidden border border-stone-200 bg-stone-100 shadow-sm cursor-zoom-in">
                           <img
                             src={selectedOrder.slipUrl}
@@ -2599,6 +2663,55 @@ export default function MainSPA({ initialPage = 'home' }: { initialPage?: 'home'
                         </div>
                       </div>
                     )}
+
+                    {selectedOrder.refundSlipUrl ? (
+                      <div className="pt-2.5 border-t border-stone-150 space-y-1.5">
+                        <p className="text-[11px] text-purple-700 font-bold">💸 หลักฐานการโอนเงินคืน (สลิปคืนเงิน):</p>
+                        <div className="relative group w-36 h-48 rounded-xl overflow-hidden border border-purple-200 bg-stone-100 shadow-sm cursor-zoom-in">
+                          <img
+                            src={selectedOrder.refundSlipUrl}
+                            alt="Refund Slip"
+                            className="w-full h-full object-cover"
+                            onClick={() => setViewingSlipUrl(selectedOrder.refundSlipUrl || null)}
+                          />
+                          <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 flex items-center justify-center transition-opacity text-white text-[10px] font-extrabold uppercase pointer-events-none">
+                            🔍 ดูสลิปภาพใหญ่
+                          </div>
+                        </div>
+                      </div>
+                    ) : (currentUser?.role === 'Admin' && (
+                      <div className="pt-2.5 border-t border-stone-150 flex items-center justify-between">
+                        <span className="text-[11px] text-stone-500 font-bold">แนบสลิปโอนเงินคืน (แอดมิน):</span>
+                        <label className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-purple-50 hover:bg-purple-100 text-purple-700 font-bold text-xs rounded-xl border border-purple-200 cursor-pointer transition-colors">
+                          <span>📷</span> {isUploadingRefund ? 'กำลังอัปโหลด...' : 'แนบสลิปคืนเงิน'}
+                          <input
+                            type="file"
+                            accept="image/*"
+                            disabled={isUploadingRefund}
+                            onChange={async (e) => {
+                              const file = e.target.files?.[0];
+                              if (!file) return;
+                              setIsUploadingRefund(true);
+                              try {
+                                const compressed = await compressImage(file);
+                                const formData = new FormData();
+                                formData.append('file', compressed);
+                                const { url } = await uploadFile(formData);
+                                await updateOrder(selectedOrder.id, { paymentStatus: 'คืนเงินสำเร็จ', refundSlipUrl: url });
+                                setOrders(prev => prev.map(o => o.id === selectedOrder.id ? { ...o, paymentStatus: 'คืนเงินสำเร็จ', refundSlipUrl: url } : o));
+                                setSelectedOrder({ ...selectedOrder, paymentStatus: 'คืนเงินสำเร็จ', refundSlipUrl: url });
+                                alert('อัปโหลดสลิปโอนเงินคืนและเปลี่ยนสถานะเป็น "คืนเงินสำเร็จ" เรียบร้อยแล้ว!');
+                              } catch (err) {
+                                alert('เกิดข้อผิดพลาดในการอัปโหลดสลิปคืนเงิน');
+                              } finally {
+                                setIsUploadingRefund(false);
+                              }
+                            }}
+                            className="hidden"
+                          />
+                        </label>
+                      </div>
+                    ))}
                   </div>
                 </div>
 
@@ -2640,16 +2753,16 @@ export default function MainSPA({ initialPage = 'home' }: { initialPage?: 'home'
                     </div>
 
                     <div className="pt-4 flex flex-col sm:flex-row justify-center md:justify-start gap-4">
-                      <a
-                        href="#"
-                        onClick={(e) => { e.preventDefault(); setActivePage('products'); setSelectedCategory(null); }}
+                      <Link
+                        href="/products"
+                        onClick={() => setSelectedCategory(null)}
                         className="bg-[#7e22ce] hover:bg-[#6b21a8] text-white text-lg font-semibold px-8 py-4 rounded-full flex items-center justify-center gap-2.5 shadow-lg hover:shadow-xl transition-all transform hover:-translate-y-0.5 duration-200"
                       >
                         <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M3 3h2l.4 2M7 13h10l4-8H5.4M7 13L5.4 5M7 13l-2.293 2.293c-.63.63-.184 1.707.707 1.707H17m0 0a2 2 0 100 4 2 2 0 000-4zm-8 2a2 2 0 11-4 0 2 2 0 014 0z" />
                         </svg>
                         สั่งซื้อเลย
-                      </a>
+                      </Link>
                     </div>
                   </div>
 
@@ -3017,15 +3130,13 @@ export default function MainSPA({ initialPage = 'home' }: { initialPage?: 'home'
 
                 {/* Redirect Button */}
                 <div className="mt-12 text-center">
-                  <button
-                    onClick={() => {
-                      setActivePage('products');
-                      setSelectedCategory(null);
-                    }}
+                  <Link
+                    href="/products"
+                    onClick={() => setSelectedCategory(null)}
                     className="bg-[#166534] hover:bg-emerald-800 text-white font-bold px-8 py-4 rounded-full text-base shadow-lg hover:shadow-xl transition-all cursor-pointer inline-flex items-center gap-2"
                   >
                     🛒 ไปเลือกซื้อสินค้า
-                  </button>
+                  </Link>
                 </div>
               </div>
             </section>
@@ -3621,7 +3732,8 @@ export default function MainSPA({ initialPage = 'home' }: { initialPage?: 'home'
                         <div className="flex flex-wrap gap-2">
                           <span className={`text-[10px] font-bold px-2.5 py-1 rounded-full border ${order.paymentStatus === 'ชำระเงินแล้ว' ? 'bg-emerald-50 text-emerald-700 border-emerald-200' :
                             order.paymentStatus === 'รอตรวจสอบ' ? 'bg-amber-50 text-amber-700 border-amber-200' :
-                              'bg-red-50 text-red-700 border-red-200'
+                              order.paymentStatus === 'คืนเงินสำเร็จ' ? 'bg-purple-50 text-purple-700 border-purple-200' :
+                                'bg-red-50 text-red-700 border-red-200'
                             }`}>
                             💳 {order.paymentStatus}
                           </span>
@@ -3657,6 +3769,25 @@ export default function MainSPA({ initialPage = 'home' }: { initialPage?: 'home'
                             className="inline-flex items-center gap-1 text-emerald-800 hover:text-emerald-950 font-bold bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 px-2.5 py-1.5 rounded-xl transition-all shadow-sm"
                           >
                             🖼️ ดูสลิปที่แนบ
+                          </button>
+                        </div>
+                      )}
+
+                      {/* Refund Slip details for customer */}
+                      {(order.paymentStatus === 'คืนเงินสำเร็จ' || !!order.refundSlipUrl) && (
+                        <div className="pt-2 flex items-center justify-between text-xs border-t border-purple-150 animate-in fade-in duration-200">
+                          <span className="text-purple-700 font-bold">💸 หลักฐานการโอนเงินคืน:</span>
+                          <button
+                            onClick={() => {
+                              if (order.refundSlipUrl) {
+                                setViewingSlipUrl(order.refundSlipUrl);
+                              } else {
+                                alert('รายการนี้อยู่ในสถานะคืนเงินสำเร็จแล้ว แต่แอดมินยังไม่ได้แนบไฟล์รูปสลิปคืนเงินครับ');
+                              }
+                            }}
+                            className="inline-flex items-center gap-1 text-purple-800 hover:text-purple-950 font-bold bg-purple-50 hover:bg-purple-100 border border-purple-200 px-2.5 py-1.5 rounded-xl transition-all shadow-sm cursor-pointer"
+                          >
+                            💸 ดูสลิปโอนเงินคืน
                           </button>
                         </div>
                       )}
@@ -4677,7 +4808,21 @@ export default function MainSPA({ initialPage = 'home' }: { initialPage?: 'home'
                             ? 'bg-emerald-55 text-stone-850 border border-emerald-200 rounded-bl-none shadow-sm font-extrabold'
                             : 'bg-white text-stone-850 border border-stone-150 rounded-bl-none shadow-sm font-bold'
                           }`}>
-                          {msg.text}
+                          {(() => {
+                            const parts = msg.text.split(/(\[img:\s*[^\]]+\])/g);
+                            return parts.map((part, i) => {
+                              const match = part.match(/^\[img:\s*([^\]]+)\]$/);
+                              if (match) {
+                                const imgUrl = match[1].trim();
+                                return (
+                                  <span key={i} className="inline-block align-middle my-1 mx-1.5 rounded-xl overflow-hidden border border-stone-200 shadow-xs bg-stone-100 flex-shrink-0">
+                                    <img src={imgUrl} alt="Product" className="w-10 h-10 object-cover inline-block" />
+                                  </span>
+                                );
+                              }
+                              return <span key={i}>{part}</span>;
+                            });
+                          })()}
                         </div>
                         <span className={`text-[9px] text-stone-400 font-semibold mt-1 ${msg.sender === 'user' ? 'text-right' : 'text-left'}`}>
                           {msg.timestamp}
@@ -4710,6 +4855,12 @@ export default function MainSPA({ initialPage = 'home' }: { initialPage?: 'home'
                 {!currentUser ? (
                   <>
                     <button
+                      onClick={() => handleSendChatMessage('📦 สอบถามสถานะสินค้า/พัสดุ')}
+                      className="text-[10px] bg-emerald-50 hover:bg-emerald-100 text-[#166534] font-bold px-2.5 py-1.5 rounded-full border border-emerald-150 transition-all cursor-pointer"
+                    >
+                      📦 สอบถามสถานะสินค้า/พัสดุ
+                    </button>
+                    <button
                       onClick={() => handleSendChatMessage('🔑 วิธีเข้าสู่ระบบ / สมัครสมาชิก')}
                       className="text-[10px] bg-emerald-50 hover:bg-emerald-100 text-[#166534] font-bold px-2.5 py-1.5 rounded-full border border-emerald-150 transition-all cursor-pointer"
                     >
@@ -4731,6 +4882,18 @@ export default function MainSPA({ initialPage = 'home' }: { initialPage?: 'home'
                 ) : (
                   <>
                     <button
+                      onClick={() => handleSendChatMessage('📦 เช็คสถานะคำสั่งซื้อของฉัน')}
+                      className="text-[10px] bg-emerald-50 hover:bg-emerald-100 text-[#166534] font-bold px-2.5 py-1.5 rounded-full border border-emerald-150 transition-all cursor-pointer"
+                    >
+                      📦 เช็คสถานะคำสั่งซื้อของฉัน
+                    </button>
+                    <button
+                      onClick={() => handleSendChatMessage('❌ ขอยกเลิกคำสั่งซื้อ')}
+                      className="text-[10px] bg-rose-50 hover:bg-rose-100 text-rose-700 font-bold px-2.5 py-1.5 rounded-full border border-rose-150 transition-all cursor-pointer"
+                    >
+                      ❌ ขอยกเลิกคำสั่งซื้อ
+                    </button>
+                    <button
                       onClick={() => handleSendChatMessage('🔥 สอบถามสินค้าขายดี')}
                       className="text-[10px] bg-emerald-50 hover:bg-emerald-100 text-[#166534] font-bold px-2.5 py-1.5 rounded-full border border-emerald-150 transition-all cursor-pointer"
                     >
@@ -4741,12 +4904,6 @@ export default function MainSPA({ initialPage = 'home' }: { initialPage?: 'home'
                       className="text-[10px] bg-emerald-50 hover:bg-emerald-100 text-[#166534] font-bold px-2.5 py-1.5 rounded-full border border-emerald-150 transition-all cursor-pointer"
                     >
                       💰 สอบถามราคาของสินค้า
-                    </button>
-                    <button
-                      onClick={() => handleSendChatMessage('🚚 วิธีการจัดส่งและชำระเงิน')}
-                      className="text-[10px] bg-emerald-50 hover:bg-emerald-100 text-[#166534] font-bold px-2.5 py-1.5 rounded-full border border-emerald-150 transition-all cursor-pointer"
-                    >
-                      🚚 วิธีการจัดส่งและชำระเงิน
                     </button>
                     <button
                       onClick={() => handleSendChatMessage('📞 ติดต่อแอดมินสวนโดยตรง')}

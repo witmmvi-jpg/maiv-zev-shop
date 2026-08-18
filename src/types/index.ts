@@ -55,10 +55,11 @@ export interface Order {
   items: OrderItem[];
   totalPrice: number;
   paymentMethod: string;
-  paymentStatus: 'รอตรวจสอบ' | 'ชำระเงินแล้ว' | 'ล้มเหลว';
+  paymentStatus: 'รอตรวจสอบ' | 'ชำระเงินแล้ว' | 'ล้มเหลว' | 'คืนเงินสำเร็จ';
   orderStatus: 'รอดำเนินการ' | 'กำลังจัดส่ง' | 'ส่งสำเร็จ' | 'ยกเลิก';
   createdAt: string;
   slipUrl?: string;
+  refundSlipUrl?: string;
 }
 
 export interface ChatMessage {

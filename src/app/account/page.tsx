@@ -4,7 +4,7 @@ import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
 import LoginModal from '@/components/modals/LoginModal';
 import { useAuth } from '@/providers/AuthProvider';
-import { getOrders, updateUser, uploadFile } from '@/app/actions';
+import { getOrders, updateOrder, updateUser, uploadFile } from '@/app/actions';
 import { compressImage } from '@/lib/imageCompressor';
 
 interface OrderItem {
@@ -22,10 +22,11 @@ interface UserOrder {
   items: OrderItem[];
   totalPrice: number;
   paymentMethod: string;
-  paymentStatus: 'รอตรวจสอบ' | 'ชำระเงินแล้ว' | 'ล้มเหลว';
+  paymentStatus: 'รอตรวจสอบ' | 'ชำระเงินแล้ว' | 'ล้มเหลว' | 'คืนเงินสำเร็จ';
   orderStatus: 'รอดำเนินการ' | 'กำลังจัดส่ง' | 'ส่งสำเร็จ' | 'ยกเลิก';
   createdAt: string;
   slipUrl?: string;
+  refundSlipUrl?: string;
 }
 
 export default function AccountPage() {
@@ -78,6 +79,23 @@ export default function AccountPage() {
     }
   };
 
+  const handleCancelOrder = async (orderId: string) => {
+    const target = orders.find(o => o.id === orderId);
+    if (target && target.orderStatus !== 'รอดำเนินการ') {
+      alert('ขออภัยครับ สามารถยกเลิกได้เฉพาะคำสั่งซื้อที่มีสถานะ "รอดำเนินการ" เท่านั้น');
+      return;
+    }
+    if (!confirm(`คุณแน่ใจหรือไม่ว่าต้องการยกเลิกคำสั่งซื้อ #${orderId}?`)) return;
+    try {
+      await updateOrder(orderId, { paymentStatus: 'ล้มเหลว', orderStatus: 'ยกเลิก' });
+      setOrders(prev => prev.map(o => o.id === orderId ? { ...o, paymentStatus: 'ล้มเหลว', orderStatus: 'ยกเลิก' } : o));
+      alert(`ยกเลิกคำสั่งซื้อ #${orderId} เรียบร้อยแล้วครับ`);
+    } catch (err) {
+      console.error('Error cancelling order:', err);
+      alert('เกิดข้อผิดพลาดในการยกเลิกคำสั่งซื้อครับ');
+    }
+  };
+
   const userOrders = currentUser
     ? orders.filter(o => o.username === currentUser.username)
     : [];
@@ -86,6 +104,8 @@ export default function AccountPage() {
     if (statusFilter === 'paid') return o.paymentStatus === 'ชำระเงินแล้ว';
     if (statusFilter === 'pending') return o.paymentStatus === 'รอตรวจสอบ';
     if (statusFilter === 'shipped') return o.orderStatus === 'ส่งสำเร็จ';
+    if (statusFilter === 'refunded') return o.paymentStatus === 'คืนเงินสำเร็จ';
+    if (statusFilter === 'cancelled') return o.orderStatus === 'ยกเลิก' || o.paymentStatus === 'ล้มเหลว' || o.paymentStatus === 'คืนเงินสำเร็จ';
     return true;
   });
 
@@ -252,6 +272,24 @@ export default function AccountPage() {
                     >
                       ส่งสำเร็จ
                     </button>
+                    <button
+                      onClick={() => setStatusFilter('cancelled')}
+                      className={`px-3 py-1.5 rounded-xl border transition-all ${statusFilter === 'cancelled'
+                          ? 'bg-[#166534] text-white border-[#166534] shadow-xs'
+                          : 'bg-stone-50 text-stone-600 border-stone-200 hover:bg-stone-100'
+                        }`}
+                    >
+                      ยกเลิก / ล้มเหลว
+                    </button>
+                    <button
+                      onClick={() => setStatusFilter('refunded')}
+                      className={`px-3 py-1.5 rounded-xl border transition-all ${statusFilter === 'refunded'
+                          ? 'bg-purple-700 text-white border-purple-700 shadow-xs'
+                          : 'bg-purple-50 text-purple-700 border-purple-200 hover:bg-purple-100'
+                        }`}
+                    >
+                      💸 คืนเงินแล้ว
+                    </button>
                   </div>
                 </div>
 
@@ -302,7 +340,9 @@ export default function AccountPage() {
                                   ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
                                   : order.paymentStatus === 'รอตรวจสอบ'
                                     ? 'bg-amber-50 text-amber-700 border-amber-200'
-                                    : 'bg-red-50 text-red-700 border-red-200'
+                                    : order.paymentStatus === 'คืนเงินสำเร็จ'
+                                      ? 'bg-purple-50 text-purple-700 border-purple-200'
+                                      : 'bg-red-50 text-red-700 border-red-200'
                                 }`}
                             >
                               💳 {order.paymentStatus}
@@ -340,23 +380,49 @@ export default function AccountPage() {
                           </div>
                         </div>
 
-                        {/* Address & Slip info */}
-                        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 text-xs">
-                          {order.shippingAddress && (
+                        {/* Address & Slip info & Cancel Action */}
+                        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 text-xs pt-2 border-t border-stone-150">
+                          {order.shippingAddress ? (
                             <div className="text-stone-600">
                               <span className="font-bold text-stone-800">📍 ที่อยู่จัดส่ง: </span>
                               {order.shippingAddress}
                             </div>
-                          )}
+                          ) : <div />}
 
-                          {order.slipUrl && (
-                            <button
-                              onClick={() => setSelectedSlipUrl(order.slipUrl || null)}
-                              className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 font-bold rounded-lg border border-emerald-200 transition-colors"
-                            >
-                              <span>🧾</span> ดูสลิปการชำระเงิน
-                            </button>
-                          )}
+                          <div className="flex flex-wrap items-center gap-2">
+                            {order.slipUrl && (
+                              <button
+                                onClick={() => setSelectedSlipUrl(order.slipUrl || null)}
+                                className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 font-bold rounded-lg border border-emerald-200 transition-colors cursor-pointer"
+                              >
+                                <span>🧾</span> ดูสลิปการชำระเงิน
+                              </button>
+                            )}
+
+                            {(order.paymentStatus === 'คืนเงินสำเร็จ' || !!order.refundSlipUrl) && (
+                              <button
+                                onClick={() => {
+                                  if (order.refundSlipUrl) {
+                                    setSelectedSlipUrl(order.refundSlipUrl);
+                                  } else {
+                                    alert('รายการนี้อยู่ในสถานะคืนเงินสำเร็จแล้ว แต่แอดมินยังไม่ได้แนบไฟล์รูปสลิปคืนเงินครับ');
+                                  }
+                                }}
+                                className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-purple-50 hover:bg-purple-100 text-purple-700 font-bold rounded-lg border border-purple-200 transition-colors cursor-pointer"
+                              >
+                                <span>💸</span> ดูสลิปโอนเงินคืน
+                              </button>
+                            )}
+
+                            {order.orderStatus === 'รอดำเนินการ' && (
+                              <button
+                                onClick={() => handleCancelOrder(order.id)}
+                                className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-rose-50 hover:bg-rose-100 text-rose-700 font-bold rounded-lg border border-rose-200 transition-colors cursor-pointer"
+                              >
+                                <span>🚫</span> ยกเลิกคำสั่งซื้อ
+                              </button>
+                            )}
+                          </div>
                         </div>
                       </div>
                     ))}

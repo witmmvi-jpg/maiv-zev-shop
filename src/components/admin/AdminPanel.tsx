@@ -1021,11 +1021,13 @@ export default function AdminPanel() {
                                   }}
                                   className={`text-xs font-bold rounded-full px-2.5 py-1.5 border focus:outline-none cursor-pointer ${order.paymentStatus === 'ชำระเงินแล้ว' ? 'bg-emerald-50 text-emerald-700 border-emerald-200' :
                                     order.paymentStatus === 'รอตรวจสอบ' ? 'bg-amber-50 text-amber-700 border-amber-200 animate-pulse' :
-                                      'bg-red-50 text-red-700 border-red-200'
+                                      order.paymentStatus === 'คืนเงินสำเร็จ' ? 'bg-purple-50 text-purple-700 border-purple-200' :
+                                        'bg-red-50 text-red-700 border-red-200'
                                     }`}
                                 >
                                   <option value="รอตรวจสอบ">⏳ รอตรวจสอบ</option>
                                   <option value="ชำระเงินแล้ว">✅ ชำระเงินแล้ว</option>
+                                  <option value="คืนเงินสำเร็จ">💸 คืนเงินสำเร็จ</option>
                                   <option value="ล้มเหลว">❌ ล้มเหลว</option>
                                 </select>
                               </td>
@@ -1050,12 +1052,36 @@ export default function AdminPanel() {
                                 </select>
                               </td>
                               <td className="p-4">
-                                <button
-                                  onClick={() => setSelectedOrder(order)}
-                                  className="bg-stone-100 hover:bg-stone-200 text-stone-700 text-xs font-bold px-3 py-1.5 rounded-xl transition-all"
-                                >
-                                  ดูรายละเอียด
-                                </button>
+                                <div className="flex flex-col gap-1.5 items-start">
+                                  <button
+                                    onClick={() => setSelectedOrder(order)}
+                                    className="bg-stone-100 hover:bg-stone-200 text-stone-700 text-xs font-bold px-3 py-1.5 rounded-xl transition-all cursor-pointer"
+                                  >
+                                    ดูรายละเอียด
+                                  </button>
+                                  <label className="text-[11px] font-bold text-purple-700 hover:text-purple-800 underline flex items-center gap-1 cursor-pointer">
+                                    📷 {order.refundSlipUrl ? 'สลิปคืนเงิน' : 'แนบสลิปคืนเงิน'}
+                                    <input
+                                      type="file"
+                                      accept="image/*"
+                                      onChange={async (e) => {
+                                        const file = e.target.files?.[0];
+                                        if (!file) return;
+                                        try {
+                                          const formData = new FormData();
+                                          formData.append('file', file);
+                                          const { url } = await uploadFile(formData);
+                                          await handleUpdateOrderStatus(order.id, { paymentStatus: 'คืนเงินสำเร็จ', refundSlipUrl: url });
+                                          setOrders(orders.map(o => o.id === order.id ? { ...o, paymentStatus: 'คืนเงินสำเร็จ', refundSlipUrl: url } : o));
+                                          alert(`อัปโหลดสลิปโอนเงินคืนเรียบร้อยแล้วสำหรับออเดอร์ #${order.id}!`);
+                                        } catch (err) {
+                                          alert('เกิดข้อผิดพลาดในการอัปโหลดสลิปคืนเงิน');
+                                        }
+                                      }}
+                                      className="hidden"
+                                    />
+                                  </label>
+                                </div>
                               </td>
                             </tr>
                           ))}
@@ -1894,7 +1920,7 @@ export default function AdminPanel() {
 
                     {selectedOrder.slipUrl && (
                       <div className="pt-2.5 border-t border-stone-150 space-y-1.5">
-                        <p className="text-[11px] text-stone-400 font-medium">หลักฐานการโอนเงิน (สลิป):</p>
+                        <p className="text-[11px] text-stone-400 font-medium">หลักฐานการโอนเงินลูกค้า (สลิป):</p>
                         <div className="relative group w-36 h-48 rounded-xl overflow-hidden border border-stone-200 bg-stone-100 shadow-sm cursor-zoom-in">
                           <img
                             src={selectedOrder.slipUrl}
@@ -1906,6 +1932,52 @@ export default function AdminPanel() {
                             🔍 ดูสลิปภาพใหญ่
                           </div>
                         </div>
+                      </div>
+                    )}
+
+                    {selectedOrder.refundSlipUrl ? (
+                      <div className="pt-2.5 border-t border-stone-150 space-y-1.5">
+                        <p className="text-[11px] text-purple-700 font-bold flex items-center gap-1">
+                          <span>💸</span> หลักฐานการโอนเงินคืน (สลิปคืนเงิน):
+                        </p>
+                        <div className="relative group w-36 h-48 rounded-xl overflow-hidden border border-purple-200 bg-stone-100 shadow-sm cursor-zoom-in">
+                          <img
+                            src={selectedOrder.refundSlipUrl}
+                            alt="Refund Slip"
+                            className="w-full h-full object-cover"
+                            onClick={() => setViewingSlipUrl(selectedOrder.refundSlipUrl || null)}
+                          />
+                          <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 flex items-center justify-center transition-opacity text-white text-[10px] font-extrabold uppercase pointer-events-none">
+                            🔍 ดูสลิปภาพใหญ่
+                          </div>
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="pt-2.5 border-t border-stone-150 flex items-center justify-between">
+                        <span className="text-[11px] text-stone-500 font-bold">แนบสลิปโอนเงินคืน (แอดมิน):</span>
+                        <label className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-purple-50 hover:bg-purple-100 text-purple-700 font-bold text-xs rounded-xl border border-purple-200 cursor-pointer transition-colors">
+                          <span>📷</span> แนบสลิปโอนเงินคืน
+                          <input
+                            type="file"
+                            accept="image/*"
+                            onChange={async (e) => {
+                              const file = e.target.files?.[0];
+                              if (!file) return;
+                              try {
+                                const formData = new FormData();
+                                formData.append('file', file);
+                                const { url } = await uploadFile(formData);
+                                await handleUpdateOrderStatus(selectedOrder.id, { paymentStatus: 'คืนเงินสำเร็จ', refundSlipUrl: url });
+                                setOrders(prev => prev.map(o => o.id === selectedOrder.id ? { ...o, paymentStatus: 'คืนเงินสำเร็จ', refundSlipUrl: url } : o));
+                                setSelectedOrder({ ...selectedOrder, paymentStatus: 'คืนเงินสำเร็จ', refundSlipUrl: url });
+                                alert('อัปโหลดสลิปโอนเงินคืนและเปลี่ยนสถานะเป็น "คืนเงินสำเร็จ" เรียบร้อยแล้ว!');
+                              } catch (err) {
+                                alert('เกิดข้อผิดพลาดในการอัปโหลดสลิปคืนเงิน');
+                              }
+                            }}
+                            className="hidden"
+                          />
+                        </label>
                       </div>
                     )}
                   </div>
@@ -2130,14 +2202,48 @@ export default function AdminPanel() {
                             </p>
                           )}
 
-                          {order.slipUrl && (
-                            <button
-                              onClick={() => setViewingSlipUrl(order.slipUrl)}
-                              className="text-xs font-bold text-emerald-700 hover:text-emerald-800 underline flex items-center gap-1 cursor-pointer"
-                            >
-                              🧾 ดูสลิปหลักฐานชำระเงิน
-                            </button>
-                          )}
+                          <div className="flex flex-wrap items-center gap-3 pt-1">
+                            {order.slipUrl && (
+                              <button
+                                onClick={() => setViewingSlipUrl(order.slipUrl)}
+                                className="text-xs font-bold text-emerald-700 hover:text-emerald-800 underline flex items-center gap-1 cursor-pointer"
+                              >
+                                🧾 ดูสลิปชำระเงิน
+                              </button>
+                            )}
+
+                            {order.refundSlipUrl && (
+                              <button
+                                onClick={() => setViewingSlipUrl(order.refundSlipUrl)}
+                                className="text-xs font-bold text-purple-700 hover:text-purple-800 underline flex items-center gap-1 cursor-pointer"
+                              >
+                                💸 ดูสลิปคืนเงิน
+                              </button>
+                            )}
+
+                            <label className="text-xs font-bold text-purple-700 hover:text-purple-800 underline flex items-center gap-1 cursor-pointer">
+                              📷 แนบสลิปคืนเงิน
+                              <input
+                                type="file"
+                                accept="image/*"
+                                onChange={async (e) => {
+                                  const file = e.target.files?.[0];
+                                  if (!file) return;
+                                  try {
+                                    const formData = new FormData();
+                                    formData.append('file', file);
+                                    const { url } = await uploadFile(formData);
+                                    await handleUpdateOrderStatus(order.id, { paymentStatus: 'คืนเงินสำเร็จ', refundSlipUrl: url });
+                                    setOrders(orders.map(o => o.id === order.id ? { ...o, paymentStatus: 'คืนเงินสำเร็จ', refundSlipUrl: url } : o));
+                                    alert('แนบสลิปโอนเงินคืนเรียบร้อยแล้ว!');
+                                  } catch (err) {
+                                    alert('เกิดข้อผิดพลาดในการอัปโหลดสลิปคืนเงิน');
+                                  }
+                                }}
+                                className="hidden"
+                              />
+                            </label>
+                          </div>
                         </div>
                       ))
                   )}
