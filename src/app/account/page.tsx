@@ -22,11 +22,12 @@ interface UserOrder {
   items: OrderItem[];
   totalPrice: number;
   paymentMethod: string;
-  paymentStatus: 'รอตรวจสอบ' | 'ชำระเงินแล้ว' | 'ล้มเหลว' | 'คืนเงินสำเร็จ';
-  orderStatus: 'รอดำเนินการ' | 'กำลังจัดส่ง' | 'ส่งสำเร็จ' | 'ยกเลิก';
+  paymentStatus?: string;
+  orderStatus: 'รอการตรวจสอบ' | 'รอดำเนินการ' | 'กำลังจัดส่งไปให้ทางขนส่ง' | 'จัดส่งแล้ว' | 'ยกเลิก' | string;
   createdAt: string;
   slipUrl?: string;
   refundSlipUrl?: string;
+  trackingImageUrl?: string;
 }
 
 export default function AccountPage() {
@@ -34,7 +35,7 @@ export default function AccountPage() {
   const [orders, setOrders] = useState<UserOrder[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isLoginModalOpen, setIsLoginModalOpen] = useState(false);
-  const [selectedSlipUrl, setSelectedSlipUrl] = useState<string | null>(null);
+  const [selectedSlip, setSelectedSlip] = useState<{ url: string; title: string } | null>(null);
   const [statusFilter, setStatusFilter] = useState<string>('all');
   const [isUploading, setIsUploading] = useState(false);
 
@@ -101,11 +102,13 @@ export default function AccountPage() {
     : [];
 
   const filteredOrders = userOrders.filter(o => {
-    if (statusFilter === 'paid') return o.paymentStatus === 'ชำระเงินแล้ว';
-    if (statusFilter === 'pending') return o.paymentStatus === 'รอตรวจสอบ';
-    if (statusFilter === 'shipped') return o.orderStatus === 'ส่งสำเร็จ';
-    if (statusFilter === 'refunded') return o.paymentStatus === 'คืนเงินสำเร็จ';
-    if (statusFilter === 'cancelled') return o.orderStatus === 'ยกเลิก' || o.paymentStatus === 'ล้มเหลว' || o.paymentStatus === 'คืนเงินสำเร็จ';
+    const status = o.orderStatus || (o as any).status || '';
+    if (statusFilter === 'all') return true;
+    if (statusFilter === 'pending_verify') return status === 'รอการตรวจสอบ';
+    if (statusFilter === 'pending_process') return status === 'รอดำเนินการ';
+    if (statusFilter === 'shipping') return status === 'กำลังจัดส่งไปให้ทางขนส่ง' || status === 'กำลังจัดส่ง';
+    if (statusFilter === 'delivered') return status === 'จัดส่งแล้ว' || status === 'ส่งสำเร็จ';
+    if (statusFilter === 'cancelled') return status === 'ยกเลิกการสั่งซื้อ' || status === 'ยกเลิก';
     return true;
   });
 
@@ -238,57 +241,57 @@ export default function AccountPage() {
                   <div className="flex flex-wrap gap-1.5 text-xs font-bold">
                     <button
                       onClick={() => setStatusFilter('all')}
-                      className={`px-3 py-1.5 rounded-xl border transition-all ${statusFilter === 'all'
-                          ? 'bg-emerald-600 text-white border-emerald-600 shadow-xs'
+                      className={`px-3 py-1.5 rounded-xl border transition-all cursor-pointer ${statusFilter === 'all'
+                          ? 'bg-stone-900 text-white border-stone-900 shadow-xs'
                           : 'bg-stone-50 text-stone-600 border-stone-200 hover:bg-stone-100'
                         }`}
                     >
                       ทั้งหมด ({userOrders.length})
                     </button>
                     <button
-                      onClick={() => setStatusFilter('paid')}
-                      className={`px-3 py-1.5 rounded-xl border transition-all ${statusFilter === 'paid'
-                          ? 'bg-emerald-600 text-white border-emerald-600 shadow-xs'
+                      onClick={() => setStatusFilter('pending_verify')}
+                      className={`px-3 py-1.5 rounded-xl border transition-all cursor-pointer ${statusFilter === 'pending_verify'
+                          ? 'bg-amber-600 text-white border-amber-600 shadow-xs'
                           : 'bg-stone-50 text-stone-600 border-stone-200 hover:bg-stone-100'
                         }`}
                     >
-                      ชำระแล้ว
+                      ⏳ รอการตรวจสอบ
                     </button>
                     <button
-                      onClick={() => setStatusFilter('pending')}
-                      className={`px-3 py-1.5 rounded-xl border transition-all ${statusFilter === 'pending'
-                          ? 'bg-emerald-600 text-white border-emerald-600 shadow-xs'
+                      onClick={() => setStatusFilter('pending_process')}
+                      className={`px-3 py-1.5 rounded-xl border transition-all cursor-pointer ${statusFilter === 'pending_process'
+                          ? 'bg-blue-600 text-white border-blue-600 shadow-xs'
                           : 'bg-stone-50 text-stone-600 border-stone-200 hover:bg-stone-100'
                         }`}
                     >
-                      รอตรวจสอบ
+                      📦 รอดำเนินการ
                     </button>
                     <button
-                      onClick={() => setStatusFilter('shipped')}
-                      className={`px-3 py-1.5 rounded-xl border transition-all ${statusFilter === 'shipped'
+                      onClick={() => setStatusFilter('shipping')}
+                      className={`px-3 py-1.5 rounded-xl border transition-all cursor-pointer ${statusFilter === 'shipping'
+                          ? 'bg-purple-600 text-white border-purple-600 shadow-xs'
+                          : 'bg-stone-50 text-stone-600 border-stone-200 hover:bg-stone-100'
+                        }`}
+                    >
+                      🚚 กำลังจัดส่งไปให้ทางขนส่ง
+                    </button>
+                    <button
+                      onClick={() => setStatusFilter('delivered')}
+                      className={`px-3 py-1.5 rounded-xl border transition-all cursor-pointer ${statusFilter === 'delivered'
                           ? 'bg-emerald-600 text-white border-emerald-600 shadow-xs'
                           : 'bg-stone-50 text-stone-600 border-stone-200 hover:bg-stone-100'
                         }`}
                     >
-                      ส่งสำเร็จ
+                      ✅ จัดส่งแล้ว
                     </button>
                     <button
                       onClick={() => setStatusFilter('cancelled')}
-                      className={`px-3 py-1.5 rounded-xl border transition-all ${statusFilter === 'cancelled'
-                          ? 'bg-[#166534] text-white border-[#166534] shadow-xs'
+                      className={`px-3 py-1.5 rounded-xl border transition-all cursor-pointer ${statusFilter === 'cancelled'
+                          ? 'bg-red-600 text-white border-red-600 shadow-xs'
                           : 'bg-stone-50 text-stone-600 border-stone-200 hover:bg-stone-100'
                         }`}
                     >
-                      ยกเลิก / ล้มเหลว
-                    </button>
-                    <button
-                      onClick={() => setStatusFilter('refunded')}
-                      className={`px-3 py-1.5 rounded-xl border transition-all ${statusFilter === 'refunded'
-                          ? 'bg-purple-700 text-white border-purple-700 shadow-xs'
-                          : 'bg-purple-50 text-purple-700 border-purple-200 hover:bg-purple-100'
-                        }`}
-                    >
-                      💸 คืนเงินแล้ว
+                      ❌ ยกเลิกการสั่งซื้อ
                     </button>
                   </div>
                 </div>
@@ -336,28 +339,20 @@ export default function AccountPage() {
 
                           <div className="flex flex-wrap gap-2">
                             <span
-                              className={`text-[11px] font-bold px-3 py-1 rounded-full border ${order.paymentStatus === 'ชำระเงินแล้ว'
-                                  ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
-                                  : order.paymentStatus === 'รอตรวจสอบ'
-                                    ? 'bg-amber-50 text-amber-700 border-amber-200'
-                                    : order.paymentStatus === 'คืนเงินสำเร็จ'
-                                      ? 'bg-purple-50 text-purple-700 border-purple-200'
-                                      : 'bg-red-50 text-red-700 border-red-200'
-                                }`}
+                              className={`text-[11px] font-bold px-3 py-1 rounded-full border shadow-sm ${
+                                order.orderStatus === 'จัดส่งแล้ว' || order.orderStatus === 'ส่งสำเร็จ' ? 'bg-emerald-50 text-emerald-700 border-emerald-200' :
+                                order.orderStatus === 'กำลังจัดส่งไปให้ทางขนส่ง' || order.orderStatus === 'กำลังจัดส่ง' ? 'bg-purple-50 text-purple-700 border-purple-200' :
+                                order.orderStatus === 'รอดำเนินการ' ? 'bg-blue-50 text-blue-700 border-blue-200' :
+                                order.orderStatus === 'รอการตรวจสอบ' || order.orderStatus === 'รอตรวจสอบ' ? 'bg-amber-50 text-amber-700 border-amber-200 animate-pulse' :
+                                'bg-red-50 text-red-700 border-red-200'
+                              }`}
                             >
-                              💳 {order.paymentStatus}
-                            </span>
-                            <span
-                              className={`text-[11px] font-bold px-3 py-1 rounded-full border ${order.orderStatus === 'ส่งสำเร็จ'
-                                  ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
-                                  : order.orderStatus === 'กำลังจัดส่ง'
-                                    ? 'bg-blue-50 text-blue-700 border-blue-200'
-                                    : order.orderStatus === 'รอดำเนินการ'
-                                      ? 'bg-stone-100 text-stone-600 border-stone-200'
-                                      : 'bg-red-50 text-red-700 border-red-200'
-                                }`}
-                            >
-                              📦 {order.orderStatus}
+                              {order.orderStatus === 'จัดส่งแล้ว' || order.orderStatus === 'ส่งสำเร็จ' ? '✅ จัดส่งแล้ว' :
+                               order.orderStatus === 'กำลังจัดส่งไปให้ทางขนส่ง' || order.orderStatus === 'กำลังจัดส่ง' ? '🚚 กำลังจัดส่งไปให้ทางขนส่ง' :
+                               order.orderStatus === 'รอดำเนินการ' ? '📦 รอดำเนินการ' :
+                               order.orderStatus === 'รอการตรวจสอบ' || order.orderStatus === 'รอตรวจสอบ' ? '⏳ รอการตรวจสอบ' :
+                               order.orderStatus === 'ยกเลิกการสั่งซื้อ' || order.orderStatus === 'ยกเลิก' ? '❌ ยกเลิกการสั่งซื้อ' :
+                               `❌ ${order.orderStatus}`}
                             </span>
                           </div>
                         </div>
@@ -380,6 +375,46 @@ export default function AccountPage() {
                           </div>
                         </div>
 
+                        {/* Tracking / Delivery Image Section for Customer */}
+                        {(order.orderStatus === 'จัดส่งแล้ว' || order.orderStatus === 'ส่งสำเร็จ' || order.trackingImageUrl) && (
+                          <div className="flex items-center justify-between text-xs bg-emerald-50/60 p-3 rounded-xl border border-emerald-100">
+                            <div className="flex items-center gap-1.5 text-emerald-800 font-bold">
+                              <span>📷</span>
+                              <span>หลักฐานการจัดส่งสินค้า (จากแอดมิน):</span>
+                            </div>
+                            {order.trackingImageUrl ? (
+                              <button
+                                onClick={() => setSelectedSlip({ url: order.trackingImageUrl!, title: '📷 หลักฐานการจัดส่งสินค้า (จากแอดมิน)' })}
+                                className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-white hover:bg-emerald-100 text-emerald-800 font-bold rounded-lg border border-emerald-300 transition-colors cursor-pointer"
+                              >
+                                🔍 ดูรูปภาพจัดส่ง
+                              </button>
+                            ) : (
+                              <span className="text-stone-400 font-medium text-[11px]">จัดส่งแล้ว (รอแอดมินแนบรูป)</span>
+                            )}
+                          </div>
+                        )}
+
+                        {/* Refund Slip Section for Customer */}
+                        {(order.orderStatus === 'ยกเลิกการสั่งซื้อ' || order.orderStatus === 'ยกเลิก' || order.paymentStatus === 'คืนเงินสำเร็จ' || !!order.refundSlipUrl) && (
+                          <div className="flex items-center justify-between text-xs bg-rose-50/60 p-3 rounded-xl border border-rose-100">
+                            <div className="flex items-center gap-1.5 text-rose-800 font-bold">
+                              <span>💸</span>
+                              <span>หลักฐานการโอนเงินคืน (จากแอดมิน):</span>
+                            </div>
+                            {order.refundSlipUrl ? (
+                              <button
+                                onClick={() => setSelectedSlip({ url: order.refundSlipUrl!, title: '💸 หลักฐานการโอนเงินคืน (จากแอดมิน)' })}
+                                className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-white hover:bg-rose-100 text-rose-800 font-bold rounded-lg border border-rose-300 transition-colors cursor-pointer"
+                              >
+                                🔍 ดูสลิปคืนเงิน
+                              </button>
+                            ) : (
+                              <span className="text-stone-400 font-medium text-[11px]">ยกเลิกแล้ว (รอแอดมินแนบสลิปคืนเงิน)</span>
+                            )}
+                          </div>
+                        )}
+
                         {/* Address & Slip info & Cancel Action */}
                         <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 text-xs pt-2 border-t border-stone-150">
                           {order.shippingAddress ? (
@@ -392,7 +427,7 @@ export default function AccountPage() {
                           <div className="flex flex-wrap items-center gap-2">
                             {order.slipUrl && (
                               <button
-                                onClick={() => setSelectedSlipUrl(order.slipUrl || null)}
+                                onClick={() => setSelectedSlip({ url: order.slipUrl!, title: '🧾 สลิปหลักฐานการชำระเงิน' })}
                                 className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 font-bold rounded-lg border border-emerald-200 transition-colors cursor-pointer"
                               >
                                 <span>🧾</span> ดูสลิปการชำระเงิน
@@ -403,7 +438,7 @@ export default function AccountPage() {
                               <button
                                 onClick={() => {
                                   if (order.refundSlipUrl) {
-                                    setSelectedSlipUrl(order.refundSlipUrl);
+                                    setSelectedSlip({ url: order.refundSlipUrl, title: '💸 หลักฐานการโอนเงินคืน (จากแอดมิน)' });
                                   } else {
                                     alert('รายการนี้อยู่ในสถานะคืนเงินสำเร็จแล้ว แต่แอดมินยังไม่ได้แนบไฟล์รูปสลิปคืนเงินครับ');
                                   }
@@ -435,18 +470,18 @@ export default function AccountPage() {
       </main>
 
       {/* Slip Modal Lightbox */}
-      {selectedSlipUrl && (
+      {selectedSlip && (
         <div className="fixed inset-0 z-50 overflow-hidden flex items-center justify-center p-4 bg-stone-900/80 backdrop-blur-md animate-in fade-in duration-200">
           <div className="relative max-w-lg w-full bg-white rounded-3xl p-4 shadow-2xl">
             <button
-              onClick={() => setSelectedSlipUrl(null)}
+              onClick={() => setSelectedSlip(null)}
               className="absolute top-4 right-4 z-10 w-8 h-8 rounded-full bg-stone-100 hover:bg-stone-200 text-stone-600 flex items-center justify-center font-bold"
             >
               ✕
             </button>
-            <h4 className="text-sm font-bold text-stone-900 mb-3 px-2">สลิปหลักฐานการชำระเงิน</h4>
+            <h4 className="text-sm font-bold text-stone-900 mb-3 px-2">{selectedSlip.title}</h4>
             <div className="max-h-[75vh] overflow-y-auto rounded-2xl bg-stone-100 flex items-center justify-center p-2 border border-stone-200">
-              <img src={selectedSlipUrl} alt="หลักฐานการชำระเงิน" className="max-w-full h-auto object-contain rounded-xl" />
+              <img src={selectedSlip.url} alt={selectedSlip.title} className="max-w-full h-auto object-contain rounded-xl" />
             </div>
           </div>
         </div>

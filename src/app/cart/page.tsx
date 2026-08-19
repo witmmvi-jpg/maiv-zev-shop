@@ -106,14 +106,14 @@ export default function CartPage() {
         email: currentUser.email,
         totalPrice,
         paymentMethod,
-        paymentStatus: 'รอตรวจสอบ',
-        orderStatus: 'รอดำเนินการ',
+        orderStatus: 'รอการตรวจสอบ',
         shippingAddress: shippingAddress.trim(),
         slipUrl: slipPreview,
         items: selectedItems.map((item) => ({
           productName: item.productName,
           quantity: item.quantity,
           price: item.price,
+          unit: item.unit || 'ชิ้น',
         })),
       });
 

@@ -72,11 +72,12 @@ interface Order {
   items: OrderItem[];
   totalPrice: number;
   paymentMethod: string;
-  paymentStatus: 'รอตรวจสอบ' | 'ชำระเงินแล้ว' | 'ล้มเหลว' | 'คืนเงินสำเร็จ';
-  orderStatus: 'รอดำเนินการ' | 'กำลังจัดส่ง' | 'ส่งสำเร็จ' | 'ยกเลิก';
+  paymentStatus?: string;
+  orderStatus: 'รอการตรวจสอบ' | 'รอดำเนินการ' | 'กำลังจัดส่งไปให้ทางขนส่ง' | 'จัดส่งแล้ว' | 'ยกเลิก' | string;
   createdAt: string;
   slipUrl?: string;
   refundSlipUrl?: string;
+  trackingImageUrl?: string;
 }
 
 interface ChatMessage {
@@ -632,13 +633,15 @@ export default function MainSPA({ initialPage = 'home' }: { initialPage?: 'home'
     return "ผลิตภัณฑ์คุณภาพเกรดพรีเมียม สดใหม่ส่งตรงจากสวนวิถีธรรมชาติ ปลอดภัยต่อสุขภาพ 100%";
   };
 
-  // Helper to calculate total products sold count (only from paid orders)
+  // Helper to calculate total products sold count (from non-cancelled orders)
   const getProductSalesCount = (productName: string): number => {
+    const targetName = productName.trim().toLowerCase();
     return orders
-      .filter(o => o.paymentStatus === 'ชำระเงินแล้ว')
+      .filter(o => o.orderStatus !== 'ยกเลิกการสั่งซื้อ' && o.orderStatus !== 'ยกเลิก' && o.paymentStatus !== 'ล้มเหลว')
       .reduce((sum, order) => {
-        const item = order.items.find(i => i.productName === productName);
-        return sum + (item ? item.quantity : 0);
+        const items = order.items ? order.items.filter(i => i.productName && i.productName.trim().toLowerCase() === targetName) : [];
+        const itemQty = items.reduce((iSum, item) => iSum + (item.quantity || 0), 0);
+        return sum + itemQty;
       }, 0);
   };
 
@@ -1285,11 +1288,6 @@ export default function MainSPA({ initialPage = 'home' }: { initialPage?: 'home'
                     }`}
                 >
                   <span>📦</span> จัดการคำสั่งซื้อ
-                  {orders.filter(o => o.paymentStatus === 'รอตรวจสอบ').length > 0 && (
-                    <span className="ml-auto bg-amber-500 text-white text-[10px] px-2.5 py-0.5 rounded-full font-bold animate-pulse">
-                      {orders.filter(o => o.paymentStatus === 'รอตรวจสอบ').length}
-                    </span>
-                  )}
                 </button>
 
                 <button
@@ -1306,6 +1304,11 @@ export default function MainSPA({ initialPage = 'home' }: { initialPage?: 'home'
                     }`}
                 >
                   <span>💳</span> ช่องทางชำระเงิน & ยอดขาย
+                  {orders.filter(o => o.orderStatus === 'รอการตรวจสอบ').length > 0 && (
+                    <span className="ml-auto bg-amber-500 text-white text-[10px] px-2.5 py-0.5 rounded-full font-bold animate-pulse">
+                      {orders.filter(o => o.orderStatus === 'รอการตรวจสอบ').length}
+                    </span>
+                  )}
                 </button>
 
                 <button
@@ -2037,15 +2040,15 @@ export default function MainSPA({ initialPage = 'home' }: { initialPage?: 'home'
                       <div className="p-5 rounded-2xl bg-emerald-50 border border-emerald-100">
                         <p className="text-xs font-bold text-emerald-800 uppercase tracking-wide">ยอดขายที่ยืนยันแล้ว</p>
                         <p className="text-2xl font-extrabold text-emerald-900 mt-1">
-                          {orders.filter(o => o.paymentStatus === 'ชำระเงินแล้ว').reduce((sum, o) => sum + o.totalPrice, 0)} บาท
+                          {orders.filter(o => o.orderStatus === 'รอดำเนินการ' || o.orderStatus === 'กำลังจัดส่งไปให้ทางขนส่ง' || o.orderStatus === 'จัดส่งแล้ว' ).reduce((sum, o) => sum + o.totalPrice, 0)} บาท
                         </p>
-                        <p className="text-[10px] text-emerald-600 mt-0.5">จากคำสั่งซื้อที่ได้รับการชำระเงินแล้ว</p>
+                        <p className="text-[10px] text-emerald-600 mt-0.5">จากคำสั่งซื้อที่ได้รับการชำระเงินและอนุมัติแล้ว</p>
                       </div>
 
                       <div className="p-5 rounded-2xl bg-amber-50 border border-amber-100">
                         <p className="text-xs font-bold text-amber-800 uppercase tracking-wide">ยอดขายรออนุมัติ</p>
                         <p className="text-2xl font-extrabold text-amber-900 mt-1">
-                          {orders.filter(o => o.paymentStatus === 'รอตรวจสอบ').reduce((sum, o) => sum + o.totalPrice, 0)} บาท
+                          {orders.filter(o => o.orderStatus === 'รอการตรวจสอบ').reduce((sum, o) => sum + o.totalPrice, 0)} บาท
                         </p>
                         <p className="text-[10px] text-amber-600 mt-0.5">อยู่ระหว่างรอการอนุมัติสลิปโอนเงิน</p>
                       </div>
@@ -2062,7 +2065,7 @@ export default function MainSPA({ initialPage = 'home' }: { initialPage?: 'home'
                       <h4 className="font-bold text-stone-900 flex items-center gap-2">
                         <span>⏳</span> ตรวจสอบการโอนเงินที่รอการอนุมัติ
                       </h4>
-                      {orders.filter(o => o.paymentStatus === 'รอตรวจสอบ').length === 0 ? (
+                      {orders.filter(o => o.orderStatus === 'รอการตรวจสอบ').length === 0 ? (
                         <div className="p-6 text-center border border-dashed border-stone-200 rounded-2xl text-stone-500 font-medium">
                           ไม่มีออเดอร์ที่ค้างตรวจสอบยอดชำระเงิน
                         </div>
@@ -2080,7 +2083,7 @@ export default function MainSPA({ initialPage = 'home' }: { initialPage?: 'home'
                               </tr>
                             </thead>
                             <tbody className="divide-y divide-stone-100 font-medium text-stone-700">
-                              {orders.filter(o => o.paymentStatus === 'รอตรวจสอบ').map((order) => (
+                              {orders.filter(o => o.orderStatus === 'รอการตรวจสอบ').map((order) => (
                                 <tr key={order.id} className="hover:bg-stone-50/50">
                                   <td className="p-4 font-bold text-purple-700">{order.id}</td>
                                   <td className="p-4 text-stone-900 font-bold">{order.username}</td>
@@ -2102,16 +2105,26 @@ export default function MainSPA({ initialPage = 'home' }: { initialPage?: 'home'
                                   <td className="p-4">
                                     <div className="flex items-center gap-2">
                                       <button
-                                        onClick={() => {
-                                          setOrders(orders.map(o => o.id === order.id ? { ...o, paymentStatus: 'ชำระเงินแล้ว', orderStatus: 'กำลังจัดส่ง' } : o));
+                                        onClick={async () => {
+                                          setOrders(orders.map(o => o.id === order.id ? { ...o, orderStatus: 'รอดำเนินการ' } : o));
+                                          try {
+                                            await updateOrder(order.id, { orderStatus: 'รอดำเนินการ' });
+                                          } catch (err) {
+                                            console.error('Error approving order:', err);
+                                          }
                                         }}
                                         className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold px-3 py-1.5 rounded-xl text-xs shadow-sm transition-all"
                                       >
                                         ✔️ อนุมัติสลิป
                                       </button>
                                       <button
-                                        onClick={() => {
-                                          setOrders(orders.map(o => o.id === order.id ? { ...o, paymentStatus: 'ล้มเหลว', orderStatus: 'ยกเลิก' } : o));
+                                        onClick={async () => {
+                                          setOrders(orders.map(o => o.id === order.id ? { ...o, orderStatus: 'ยกเลิกการสั่งซื้อ' } : o));
+                                          try {
+                                            await updateOrder(order.id, { orderStatus: 'ยกเลิกการสั่งซื้อ' });
+                                          } catch (err) {
+                                            console.error('Error rejecting order:', err);
+                                          }
                                         }}
                                         className="bg-red-50 text-red-600 hover:bg-red-100 hover:text-red-700 font-bold px-3 py-1.5 rounded-xl text-xs transition-all border border-red-200"
                                       >
@@ -2392,7 +2405,7 @@ export default function MainSPA({ initialPage = 'home' }: { initialPage?: 'home'
                       <input
                         type="number"
                         min="0"
-                        placeholder="ไม่ใส่ก็ได้"
+                        placeholder="ไม่บังคับ"
                         value={productForm.originalPrice || ''}
                         onChange={(e) => setProductForm({ ...productForm, originalPrice: Number(e.target.value) })}
                         className="w-full bg-stone-50 border border-stone-200 rounded-xl px-4 py-2 text-sm focus:outline-none focus:border-purple-600 font-bold"
@@ -3492,7 +3505,7 @@ export default function MainSPA({ initialPage = 'home' }: { initialPage?: 'home'
                             </div>
                             <div>
                               <p className="font-bold text-stone-800">เบอร์โทรศัพท์: <span className="text-[#166534]">065-469-5103</span></p>
-                              <p className="text-stone-500 text-[10px]">ชื่อบัญชี: สวนครอบครัว Maiv Zev (ยายมี)</p>
+                              <p className="text-stone-500 text-[10px]">ชื่อบัญชี: สวนครอบครัว Maiv Zev </p>
                             </div>
                           </div>
                         ) : (
@@ -3501,7 +3514,7 @@ export default function MainSPA({ initialPage = 'home' }: { initialPage?: 'home'
                             <div className="bg-white p-2.5 rounded-xl border border-stone-200 shadow-sm space-y-1">
                               <p className="font-bold text-stone-800">ธนาคารกสิกรไทย (KBANK)</p>
                               <p className="font-extrabold text-[#166534] text-sm">123-4-56789-0</p>
-                              <p className="text-stone-500 text-[10px]">ชื่อบัญชี: นางมี รักสวนไทย (ยายมี)</p>
+                              <p className="text-stone-500 text-[10px]">ชื่อบัญชี: นางมี รักสวนไทย</p>
                             </div>
                           </div>
                         )}
@@ -3608,14 +3621,14 @@ export default function MainSPA({ initialPage = 'home' }: { initialPage?: 'home'
                             email: currentUser.email,
                             totalPrice: calculateTotalPrice(),
                             paymentMethod: paymentMethod,
-                            paymentStatus: 'รอตรวจสอบ',
-                            orderStatus: 'รอดำเนินการ',
+                            orderStatus: 'รอการตรวจสอบ',
                             shippingAddress: shippingAddress.trim(),
                             slipUrl: slipPreview,
                             items: selectedItems.map(p => ({
                               productName: p.name,
                               quantity: cart[p.id],
                               price: p.price,
+                              unit: p.unit || 'ชิ้น',
                             })),
                           });
 
@@ -3633,8 +3646,7 @@ export default function MainSPA({ initialPage = 'home' }: { initialPage?: 'home'
                             })),
                             totalPrice: calculateTotalPrice(),
                             paymentMethod: paymentMethod,
-                            paymentStatus: 'รอตรวจสอบ',
-                            orderStatus: 'รอดำเนินการ',
+                            orderStatus: 'รอการตรวจสอบ',
                             createdAt: getLocalFormattedDate(),
                             slipUrl: slipPreview
                           };
@@ -3730,19 +3742,19 @@ export default function MainSPA({ initialPage = 'home' }: { initialPage?: 'home'
                           <span className="text-[10px] text-stone-500 font-semibold">สั่งเมื่อ: {order.createdAt}</span>
                         </div>
                         <div className="flex flex-wrap gap-2">
-                          <span className={`text-[10px] font-bold px-2.5 py-1 rounded-full border ${order.paymentStatus === 'ชำระเงินแล้ว' ? 'bg-emerald-50 text-emerald-700 border-emerald-200' :
-                            order.paymentStatus === 'รอตรวจสอบ' ? 'bg-amber-50 text-amber-700 border-amber-200' :
-                              order.paymentStatus === 'คืนเงินสำเร็จ' ? 'bg-purple-50 text-purple-700 border-purple-200' :
-                                'bg-red-50 text-red-700 border-red-200'
-                            }`}>
-                            💳 {order.paymentStatus}
-                          </span>
-                          <span className={`text-[10px] font-bold px-2.5 py-1 rounded-full border ${order.orderStatus === 'ส่งสำเร็จ' ? 'bg-emerald-50 text-emerald-700 border-emerald-200' :
-                            order.orderStatus === 'กำลังจัดส่ง' ? 'bg-blue-50 text-blue-700 border-blue-200' :
-                              order.orderStatus === 'รอดำเนินการ' ? 'bg-stone-100 text-stone-600 border-stone-200' :
-                                'bg-red-50 text-red-700 border-red-200'
-                            }`}>
-                            📦 {order.orderStatus}
+                          <span className={`text-[11px] font-bold px-3 py-1 rounded-full border shadow-sm ${
+                            order.orderStatus === 'จัดส่งแล้ว' || order.orderStatus === 'ส่งสำเร็จ' ? 'bg-emerald-50 text-emerald-700 border-emerald-200' :
+                            order.orderStatus === 'กำลังจัดส่งไปให้ทางขนส่ง' || order.orderStatus === 'กำลังจัดส่ง' ? 'bg-purple-50 text-purple-700 border-purple-200' :
+                            order.orderStatus === 'รอดำเนินการ' ? 'bg-blue-50 text-blue-700 border-blue-200' :
+                            order.orderStatus === 'รอการตรวจสอบ' || order.orderStatus === 'รอตรวจสอบ' ? 'bg-amber-50 text-amber-700 border-amber-200 animate-pulse' :
+                            'bg-red-50 text-red-700 border-red-200'
+                          }`}>
+                            {order.orderStatus === 'จัดส่งแล้ว' || order.orderStatus === 'ส่งสำเร็จ' ? '✅ จัดส่งแล้ว' :
+                             order.orderStatus === 'กำลังจัดส่งไปให้ทางขนส่ง' || order.orderStatus === 'กำลังจัดส่ง' ? '🚚 กำลังจัดส่งไปให้ทางขนส่ง' :
+                             order.orderStatus === 'รอดำเนินการ' ? '📦 รอดำเนินการ' :
+                             order.orderStatus === 'รอการตรวจสอบ' || order.orderStatus === 'รอตรวจสอบ' ? '⏳ รอการตรวจสอบ' :
+                             order.orderStatus === 'ยกเลิกการสั่งซื้อ' || order.orderStatus === 'ยกเลิก' ? '❌ ยกเลิกการสั่งซื้อ' :
+                             `❌ ${order.orderStatus}`}
                           </span>
                         </div>
                       </div>
@@ -3760,34 +3772,55 @@ export default function MainSPA({ initialPage = 'home' }: { initialPage?: 'home'
                         ))}
                       </div>
 
+                      {/* Tracking / Delivery proof photo attached by admin */}
+                      {(order.orderStatus === 'จัดส่งแล้ว' || order.orderStatus === 'ส่งสำเร็จ' || order.trackingImageUrl) && (
+                        <div className="pt-2.5 border-t border-emerald-150 flex items-center justify-between text-xs animate-in fade-in duration-200 bg-emerald-50/50 p-2.5 rounded-xl border border-emerald-100">
+                          <div className="flex items-center gap-1.5 text-emerald-800 font-extrabold">
+                            <span>📷</span>
+                            <span>หลักฐานการจัดส่งสินค้า (จากแอดมิน):</span>
+                          </div>
+                          {order.trackingImageUrl ? (
+                            <button
+                              onClick={() => setViewingSlipUrl(order.trackingImageUrl || null)}
+                              className="inline-flex items-center gap-1.5 text-emerald-800 hover:text-emerald-950 font-bold bg-white hover:bg-emerald-100 border border-emerald-300 px-3 py-1.5 rounded-xl transition-all shadow-sm cursor-pointer text-xs"
+                            >
+                              🔍 ดูรูปภาพจัดส่ง
+                            </button>
+                          ) : (
+                            <span className="text-stone-400 text-xs font-medium">จัดส่งแล้ว (ไม่มีรูปแนบ)</span>
+                          )}
+                        </div>
+                      )}
+
+                      {/* Refund Slip details for customer */}
+                      {(order.orderStatus === 'ยกเลิกการสั่งซื้อ' || order.orderStatus === 'ยกเลิก' || order.paymentStatus === 'คืนเงินสำเร็จ' || !!order.refundSlipUrl) && (
+                        <div className="pt-2.5 border-t border-rose-150 flex items-center justify-between text-xs animate-in fade-in duration-200 bg-rose-50/50 p-2.5 rounded-xl border border-rose-100">
+                          <div className="flex items-center gap-1.5 text-rose-800 font-extrabold">
+                            <span>💸</span>
+                            <span>หลักฐานการโอนเงินคืน (จากแอดมิน):</span>
+                          </div>
+                          {order.refundSlipUrl ? (
+                            <button
+                              onClick={() => setViewingSlipUrl(order.refundSlipUrl || null)}
+                              className="inline-flex items-center gap-1.5 text-rose-800 hover:text-rose-950 font-bold bg-white hover:bg-rose-100 border border-rose-300 px-3 py-1.5 rounded-xl transition-all shadow-sm cursor-pointer text-xs"
+                            >
+                              🔍 ดูสลิปคืนเงิน
+                            </button>
+                          ) : (
+                            <span className="text-stone-400 text-xs font-medium">ยกเลิกแล้ว (รอแอดมินแนบสลิปคืนเงิน)</span>
+                          )}
+                        </div>
+                      )}
+
                       {/* Slip details for customer */}
                       {order.slipUrl && (
                         <div className="pt-2 flex items-center justify-between text-xs border-t border-stone-150 animate-in fade-in duration-200">
                           <span className="text-stone-500 font-medium">สลิปหลักฐานการชำระเงิน:</span>
                           <button
                             onClick={() => setViewingSlipUrl(order.slipUrl || null)}
-                            className="inline-flex items-center gap-1 text-emerald-800 hover:text-emerald-950 font-bold bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 px-2.5 py-1.5 rounded-xl transition-all shadow-sm"
+                            className="inline-flex items-center gap-1 text-purple-800 hover:text-purple-950 font-bold bg-purple-50 hover:bg-purple-100 border border-purple-200 px-2.5 py-1.5 rounded-xl transition-all shadow-sm"
                           >
                             🖼️ ดูสลิปที่แนบ
-                          </button>
-                        </div>
-                      )}
-
-                      {/* Refund Slip details for customer */}
-                      {(order.paymentStatus === 'คืนเงินสำเร็จ' || !!order.refundSlipUrl) && (
-                        <div className="pt-2 flex items-center justify-between text-xs border-t border-purple-150 animate-in fade-in duration-200">
-                          <span className="text-purple-700 font-bold">💸 หลักฐานการโอนเงินคืน:</span>
-                          <button
-                            onClick={() => {
-                              if (order.refundSlipUrl) {
-                                setViewingSlipUrl(order.refundSlipUrl);
-                              } else {
-                                alert('รายการนี้อยู่ในสถานะคืนเงินสำเร็จแล้ว แต่แอดมินยังไม่ได้แนบไฟล์รูปสลิปคืนเงินครับ');
-                              }
-                            }}
-                            className="inline-flex items-center gap-1 text-purple-800 hover:text-purple-950 font-bold bg-purple-50 hover:bg-purple-100 border border-purple-200 px-2.5 py-1.5 rounded-xl transition-all shadow-sm cursor-pointer"
-                          >
-                            💸 ดูสลิปโอนเงินคืน
                           </button>
                         </div>
                       )}
@@ -3853,18 +3886,18 @@ export default function MainSPA({ initialPage = 'home' }: { initialPage?: 'home'
                           <span className="text-[10px] text-stone-500 font-semibold">สั่งเมื่อ: {order.createdAt}</span>
                         </div>
                         <div className="flex flex-wrap gap-2">
-                          <span className={`text-[10px] font-bold px-2.5 py-1 rounded-full border ${order.paymentStatus === 'ชำระเงินแล้ว' ? 'bg-emerald-50 text-emerald-700 border-emerald-200' :
-                            order.paymentStatus === 'รอตรวจสอบ' ? 'bg-amber-50 text-amber-700 border-amber-200' :
-                              'bg-red-50 text-red-700 border-red-200'
-                            }`}>
-                            💳 {order.paymentStatus}
-                          </span>
-                          <span className={`text-[10px] font-bold px-2.5 py-1 rounded-full border ${order.orderStatus === 'ส่งสำเร็จ' ? 'bg-emerald-50 text-emerald-700 border-emerald-200' :
-                            order.orderStatus === 'กำลังจัดส่ง' ? 'bg-blue-50 text-blue-700 border-blue-200' :
-                              order.orderStatus === 'รอดำเนินการ' ? 'bg-stone-100 text-stone-600 border-stone-200' :
-                                'bg-red-50 text-red-700 border-red-200'
-                            }`}>
-                            📦 {order.orderStatus}
+                          <span className={`text-[11px] font-bold px-3 py-1 rounded-full border shadow-sm ${
+                            order.orderStatus === 'จัดส่งแล้ว' || order.orderStatus === 'ส่งสำเร็จ' ? 'bg-emerald-50 text-emerald-700 border-emerald-200' :
+                            order.orderStatus === 'กำลังจัดส่งไปให้ทางขนส่ง' || order.orderStatus === 'กำลังจัดส่ง' ? 'bg-purple-50 text-purple-700 border-purple-200' :
+                            order.orderStatus === 'รอดำเนินการ' ? 'bg-blue-50 text-blue-700 border-blue-200' :
+                            order.orderStatus === 'รอการตรวจสอบ' || order.orderStatus === 'รอตรวจสอบ' ? 'bg-amber-50 text-amber-700 border-amber-200 animate-pulse' :
+                            'bg-red-50 text-red-700 border-red-200'
+                          }`}>
+                            {order.orderStatus === 'จัดส่งแล้ว' || order.orderStatus === 'ส่งสำเร็จ' ? '✅ จัดส่งแล้ว' :
+                             order.orderStatus === 'กำลังจัดส่งไปให้ทางขนส่ง' || order.orderStatus === 'กำลังจัดส่ง' ? '🚚 กำลังจัดส่งไปให้ทางขนส่ง' :
+                             order.orderStatus === 'รอดำเนินการ' ? '📦 รอดำเนินการ' :
+                             order.orderStatus === 'รอการตรวจสอบ' || order.orderStatus === 'รอตรวจสอบ' ? '⏳ รอการตรวจสอบ' :
+                             `❌ ${order.orderStatus}`}
                           </span>
                         </div>
                       </div>
@@ -3882,19 +3915,29 @@ export default function MainSPA({ initialPage = 'home' }: { initialPage?: 'home'
                         ))}
                       </div>
 
-                      {/* Address and slip check */}
-                      <div className="pt-2 flex items-center justify-between text-xs border-t border-stone-150">
-                        <div className="text-stone-500 font-semibold max-w-[70%] truncate">
+                      {/* Address, tracking image and slip check */}
+                      <div className="pt-2 flex flex-col gap-2 text-xs border-t border-stone-150">
+                        <div className="text-stone-500 font-semibold truncate">
                           ที่อยู่จัดส่ง: <span className="font-bold text-stone-700">{order.shippingAddress || 'ไม่ได้ระบุ'}</span>
                         </div>
-                        {order.slipUrl && (
-                          <button
-                            onClick={() => setViewingSlipUrl(order.slipUrl || null)}
-                            className="inline-flex items-center gap-1 text-purple-700 hover:text-purple-900 font-bold bg-purple-50 hover:bg-purple-100 border border-purple-200 px-2.5 py-1.5 rounded-xl transition-all shadow-sm cursor-pointer"
-                          >
-                            🖼️ ดูสลิป
-                          </button>
-                        )}
+                        <div className="flex flex-wrap items-center justify-between gap-2">
+                          {order.slipUrl && (
+                            <button
+                              onClick={() => setViewingSlipUrl(order.slipUrl || null)}
+                              className="inline-flex items-center gap-1 text-purple-700 hover:text-purple-900 font-bold bg-purple-50 hover:bg-purple-100 border border-purple-200 px-2.5 py-1.5 rounded-xl transition-all shadow-sm cursor-pointer"
+                            >
+                              🖼️ ดูสลิปโอนเงิน
+                            </button>
+                          )}
+                          {order.trackingImageUrl && (
+                            <button
+                              onClick={() => setViewingSlipUrl(order.trackingImageUrl || null)}
+                              className="inline-flex items-center gap-1 text-emerald-800 hover:text-emerald-950 font-bold bg-emerald-50 hover:bg-emerald-100 border border-emerald-300 px-2.5 py-1.5 rounded-xl transition-all shadow-sm cursor-pointer"
+                            >
+                              📷 ดูรูปจัดส่ง
+                            </button>
+                          )}
+                        </div>
                       </div>
 
                       {/* Total */}

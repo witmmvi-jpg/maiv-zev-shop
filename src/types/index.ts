@@ -55,11 +55,12 @@ export interface Order {
   items: OrderItem[];
   totalPrice: number;
   paymentMethod: string;
-  paymentStatus: 'รอตรวจสอบ' | 'ชำระเงินแล้ว' | 'ล้มเหลว' | 'คืนเงินสำเร็จ';
-  orderStatus: 'รอดำเนินการ' | 'กำลังจัดส่ง' | 'ส่งสำเร็จ' | 'ยกเลิก';
+  paymentStatus?: string;
+  orderStatus: 'รอการตรวจสอบ' | 'รอดำเนินการ' | 'กำลังจัดส่งไปให้ทางขนส่ง' | 'จัดส่งแล้ว' | 'ยกเลิกการสั่งซื้อ' | string;
   createdAt: string;
   slipUrl?: string;
   refundSlipUrl?: string;
+  trackingImageUrl?: string;
 }
 
 export interface ChatMessage {

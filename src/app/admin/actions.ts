@@ -127,66 +127,126 @@ export async function deleteCategory(id: number) {
 
 // Order Actions
 export async function getOrders() {
-  const orders = await prisma.order.findMany({
-    orderBy: { created_at: 'desc' },
-    include: {
-      user: true,
-      orderDetails: { include: { product: true } },
-    },
-  });
-
-  let rawRefundSlips: { order_id: number; refund_slip_url: string | null }[] = [];
   try {
-    rawRefundSlips = await prisma.$queryRaw`SELECT order_id, refund_slip_url FROM orders`;
-  } catch (err) {
-    console.warn('Raw SQL refund_slip_url fetch warning:', err);
-  }
-  const refundMap = new Map<number, string | null>();
-  rawRefundSlips.forEach(r => refundMap.set(r.order_id, r.refund_slip_url));
+    await prisma.$executeRawUnsafe(`ALTER TABLE orders ADD COLUMN IF NOT EXISTS status VARCHAR(50);`);
+    await prisma.$executeRawUnsafe(`ALTER TABLE orders ADD COLUMN IF NOT EXISTS tracking_image_url TEXT;`);
+    await prisma.$executeRawUnsafe(`ALTER TABLE orders ADD COLUMN IF NOT EXISTS refund_slip_url TEXT;`);
+    await prisma.$executeRawUnsafe(`ALTER TABLE orders ADD COLUMN IF NOT EXISTS slip_url TEXT;`);
+    await prisma.$executeRawUnsafe(`ALTER TABLE orders ADD COLUMN IF NOT EXISTS shipping_address TEXT;`);
+  } catch (e) {}
 
-  return orders.map(o => ({
-    id: o.order_id.toString(),
-    username: o.user?.username || 'ไม่ทราบชื่อ',
-    phone: o.user?.phone || undefined,
-    shippingAddress: o.shipping_address || undefined,
-    items: o.orderDetails.map(od => ({
-      productName: od.product?.product_name || 'ไม่ทราบสินค้า',
-      quantity: od.quantity,
-      price: od.price.toNumber(),
-      unit: od.product?.unit || 'กก.',
-    })),
-    totalPrice: o.total_price.toNumber(),
-    paymentMethod: o.payment_method,
-    paymentStatus: o.payment_status,
-    orderStatus: o.order_status,
-    createdAt: o.created_at ? o.created_at.toISOString() : new Date(0).toISOString(),
-    slipUrl: o.slip_url || undefined,
-    refundSlipUrl: (refundMap.get(o.order_id) || (o as any).refund_slip_url) || undefined,
-  }));
+  let orders: any[] = [];
+  try {
+    orders = await prisma.order.findMany({
+      orderBy: { created_at: 'desc' },
+      include: {
+        user: true,
+        orderDetails: { include: { product: true } },
+      },
+    });
+  } catch (err: any) {
+    console.warn('Prisma findMany orders failed, executing raw SQL fallback:', err?.message);
+    try {
+      const rawOrders: any[] = await prisma.$queryRaw`SELECT * FROM orders ORDER BY created_at DESC`;
+      const userIds = Array.from(new Set(rawOrders.map(o => o.user_id).filter(Boolean)));
+      const users = userIds.length > 0 ? await prisma.user.findMany({ where: { user_id: { in: userIds } } }) : [];
+      const orderIds = rawOrders.map(o => o.order_id);
+      const orderDetails = orderIds.length > 0 ? await prisma.orderDetail.findMany({
+        where: { order_id: { in: orderIds } },
+        include: { product: true }
+      }) : [];
+
+      orders = rawOrders.map(ro => ({
+        ...ro,
+        user: users.find(u => u.user_id === ro.user_id),
+        orderDetails: orderDetails.filter(od => od.order_id === ro.order_id)
+      }));
+    } catch (rawErr) {
+      console.error('Raw SQL orders fetch also failed:', rawErr);
+      orders = [];
+    }
+  }
+
+  return orders.map(o => {
+    const rawStatus = o.status || o.order_status || 'รอการตรวจสอบ';
+    let mappedStatus = rawStatus;
+    if (rawStatus === 'กำลังจัดส่ง') mappedStatus = 'กำลังจัดส่งไปให้ทางขนส่ง';
+    if (rawStatus === 'ส่งสำเร็จ') mappedStatus = 'จัดส่งแล้ว';
+    if (rawStatus === 'ยกเลิก' || rawStatus === 'ล้มเหลว') mappedStatus = 'ยกเลิกการสั่งซื้อ';
+    if (rawStatus === 'รอตรวจสอบ') mappedStatus = 'รอการตรวจสอบ';
+
+    const computedPaymentStatus = (mappedStatus === 'รอการตรวจสอบ' || rawStatus === 'รอตรวจสอบ' || o.payment_status === 'รอตรวจสอบ')
+      ? 'รอตรวจสอบ'
+      : (mappedStatus === 'จัดส่งแล้ว' || mappedStatus === 'กำลังจัดส่งไปให้ทางขนส่ง' || o.payment_status === 'ชำระเงินแล้ว')
+        ? 'ชำระเงินแล้ว'
+        : (o.payment_status || 'รอตรวจสอบ');
+
+    return {
+      id: o.order_id.toString(),
+      username: o.user?.username || 'ไม่ทราบชื่อ',
+      phone: o.user?.phone || undefined,
+      shippingAddress: o.shipping_address || undefined,
+      items: (o.orderDetails || []).map((od: any) => ({
+        productName: od.product?.product_name || 'ไม่ทราบสินค้า',
+        quantity: od.quantity,
+        price: typeof od.price === 'object' && od.price?.toNumber ? od.price.toNumber() : Number(od.price || 0),
+        unit: od.product?.unit || 'กก.',
+      })),
+      totalPrice: typeof o.total_price === 'object' && o.total_price?.toNumber ? o.total_price.toNumber() : Number(o.total_price || 0),
+      paymentMethod: o.payment_method || 'พร้อมเพย์',
+      paymentStatus: computedPaymentStatus,
+      orderStatus: mappedStatus,
+      createdAt: o.created_at ? (typeof o.created_at === 'string' ? o.created_at : o.created_at.toISOString()) : new Date(0).toISOString(),
+      slipUrl: o.slip_url || undefined,
+      refundSlipUrl: o.refund_slip_url || undefined,
+      trackingImageUrl: o.tracking_image_url || undefined,
+    };
+  });
 }
 
-export async function updateOrderStatus(id: string, data: { paymentStatus?: string; orderStatus?: string; refundSlipUrl?: string }) {
+export async function updateOrderStatus(id: string, data: { paymentStatus?: string; orderStatus?: string; refundSlipUrl?: string; trackingImageUrl?: string }) {
   const orderId = parseInt(id.replace(/[^0-9]/g, ''), 10);
   if (isNaN(orderId)) return { success: false };
 
+  const targetStatus = data.orderStatus || data.paymentStatus;
+
   try {
     const updateData: any = {};
-    if (data.paymentStatus) updateData.payment_status = data.paymentStatus;
-    if (data.orderStatus) updateData.order_status = data.orderStatus;
+    if (targetStatus) {
+      updateData.status = targetStatus;
+    }
     if (data.refundSlipUrl !== undefined) updateData.refund_slip_url = data.refundSlipUrl;
+    if (data.trackingImageUrl !== undefined) updateData.tracking_image_url = data.trackingImageUrl;
     await prisma.order.update({ where: { order_id: orderId }, data: updateData });
   } catch (err: any) {
     console.warn('Prisma Client validation error detected, performing raw SQL update fallback:', err?.message);
-    if (data.refundSlipUrl !== undefined && data.paymentStatus) {
-      await prisma.$executeRaw`UPDATE orders SET payment_status = ${data.paymentStatus}, refund_slip_url = ${data.refundSlipUrl} WHERE order_id = ${orderId}`;
-    } else if (data.refundSlipUrl !== undefined) {
-      await prisma.$executeRaw`UPDATE orders SET refund_slip_url = ${data.refundSlipUrl} WHERE order_id = ${orderId}`;
-    } else if (data.paymentStatus && data.orderStatus) {
-      await prisma.$executeRaw`UPDATE orders SET payment_status = ${data.paymentStatus}, order_status = ${data.orderStatus} WHERE order_id = ${orderId}`;
-    } else if (data.paymentStatus) {
-      await prisma.$executeRaw`UPDATE orders SET payment_status = ${data.paymentStatus} WHERE order_id = ${orderId}`;
-    } else if (data.orderStatus) {
-      await prisma.$executeRaw`UPDATE orders SET order_status = ${data.orderStatus} WHERE order_id = ${orderId}`;
+
+    try {
+      await prisma.$executeRawUnsafe(`ALTER TABLE orders ADD COLUMN IF NOT EXISTS status VARCHAR(50);`);
+      await prisma.$executeRawUnsafe(`ALTER TABLE orders ADD COLUMN IF NOT EXISTS tracking_image_url TEXT;`);
+    } catch (e) {
+      // ignore
+    }
+
+    try {
+      if (data.trackingImageUrl !== undefined && targetStatus) {
+        await prisma.$executeRaw`UPDATE orders SET status = ${targetStatus}, tracking_image_url = ${data.trackingImageUrl} WHERE order_id = ${orderId}`;
+      } else if (data.trackingImageUrl !== undefined) {
+        await prisma.$executeRaw`UPDATE orders SET tracking_image_url = ${data.trackingImageUrl} WHERE order_id = ${orderId}`;
+      } else if (data.refundSlipUrl !== undefined && targetStatus) {
+        await prisma.$executeRaw`UPDATE orders SET status = ${targetStatus}, refund_slip_url = ${data.refundSlipUrl} WHERE order_id = ${orderId}`;
+      } else if (data.refundSlipUrl !== undefined) {
+        await prisma.$executeRaw`UPDATE orders SET refund_slip_url = ${data.refundSlipUrl} WHERE order_id = ${orderId}`;
+      } else if (targetStatus) {
+        await prisma.$executeRaw`UPDATE orders SET status = ${targetStatus} WHERE order_id = ${orderId}`;
+      }
+    } catch (fallbackErr: any) {
+      console.warn('Raw SQL status update failed, fallback to order_status:', fallbackErr?.message);
+      if (targetStatus) {
+        try {
+          await prisma.$executeRaw`UPDATE orders SET order_status = ${targetStatus} WHERE order_id = ${orderId}`;
+        } catch (e2) {}
+      }
     }
   }
 

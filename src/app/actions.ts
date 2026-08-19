@@ -139,48 +139,87 @@ export async function getUsers() {
 }
 
 export async function getOrders() {
-  const orders = await prisma.order.findMany({
-    include: {
-      user: true,
-      orderDetails: {
-        include: {
-          product: true
-        }
-      }
-    },
-    orderBy: {
-      created_at: 'desc'
-    }
-  });
-
-  let rawRefundSlips: { order_id: number; refund_slip_url: string | null }[] = [];
   try {
-    rawRefundSlips = await prisma.$queryRaw`SELECT order_id, refund_slip_url FROM orders`;
-  } catch (err) {
-    console.warn('Raw SQL refund_slip_url fetch warning:', err);
-  }
-  const refundMap = new Map<number, string | null>();
-  rawRefundSlips.forEach(r => refundMap.set(r.order_id, r.refund_slip_url));
+    await prisma.$executeRawUnsafe(`ALTER TABLE orders ADD COLUMN IF NOT EXISTS status VARCHAR(50);`);
+    await prisma.$executeRawUnsafe(`ALTER TABLE orders ADD COLUMN IF NOT EXISTS tracking_image_url TEXT;`);
+    await prisma.$executeRawUnsafe(`ALTER TABLE orders ADD COLUMN IF NOT EXISTS refund_slip_url TEXT;`);
+    await prisma.$executeRawUnsafe(`ALTER TABLE orders ADD COLUMN IF NOT EXISTS slip_url TEXT;`);
+    await prisma.$executeRawUnsafe(`ALTER TABLE orders ADD COLUMN IF NOT EXISTS shipping_address TEXT;`);
+  } catch (e) {}
 
-  return orders.map(o => ({
-    id: o.order_id.toString(),
-    username: o.user?.username || 'Unknown',
-    phone: o.user?.phone || undefined,
-    shippingAddress: o.shipping_address || '',
-    items: o.orderDetails.map(od => ({
-      productName: od.product?.product_name || 'Unknown',
-      quantity: od.quantity,
-      price: Number(od.price),
-      unit: od.product?.unit || 'กก.'
-    })),
-    totalPrice: Number(o.total_price),
-    paymentMethod: o.payment_method,
-    paymentStatus: o.payment_status as 'รอตรวจสอบ' | 'ชำระเงินแล้ว' | 'ล้มเหลว' | 'คืนเงินสำเร็จ',
-    orderStatus: o.order_status as 'รอดำเนินการ' | 'กำลังจัดส่ง' | 'ส่งสำเร็จ' | 'ยกเลิก',
-    createdAt: o.created_at ? o.created_at.toISOString() : new Date().toISOString(),
-    slipUrl: o.slip_url || '',
-    refundSlipUrl: (refundMap.get(o.order_id) || (o as any).refund_slip_url) || ''
-  }));
+  let orders: any[] = [];
+  try {
+    orders = await prisma.order.findMany({
+      include: {
+        user: true,
+        orderDetails: {
+          include: {
+            product: true
+          }
+        }
+      },
+      orderBy: {
+        created_at: 'desc'
+      }
+    });
+  } catch (err: any) {
+    console.warn('Prisma findMany orders failed in actions.ts, executing raw SQL fallback:', err?.message);
+    try {
+      const rawOrders: any[] = await prisma.$queryRaw`SELECT * FROM orders ORDER BY created_at DESC`;
+      const userIds = Array.from(new Set(rawOrders.map(o => o.user_id).filter(Boolean)));
+      const users = userIds.length > 0 ? await prisma.user.findMany({ where: { user_id: { in: userIds } } }) : [];
+      const orderIds = rawOrders.map(o => o.order_id);
+      const orderDetails = orderIds.length > 0 ? await prisma.orderDetail.findMany({
+        where: { order_id: { in: orderIds } },
+        include: { product: true }
+      }) : [];
+
+      orders = rawOrders.map(ro => ({
+        ...ro,
+        user: users.find(u => u.user_id === ro.user_id),
+        orderDetails: orderDetails.filter(od => od.order_id === ro.order_id)
+      }));
+    } catch (rawErr) {
+      console.error('Raw SQL orders fetch failed in actions.ts:', rawErr);
+      orders = [];
+    }
+  }
+
+  return orders.map(o => {
+    const rawStatus = o.status || o.order_status || 'รอการตรวจสอบ';
+    let mappedStatus = rawStatus;
+    if (rawStatus === 'กำลังจัดส่ง') mappedStatus = 'กำลังจัดส่งไปให้ทางขนส่ง';
+    if (rawStatus === 'ส่งสำเร็จ') mappedStatus = 'จัดส่งแล้ว';
+    if (rawStatus === 'ยกเลิก' || rawStatus === 'ล้มเหลว') mappedStatus = 'ยกเลิกการสั่งซื้อ';
+    if (rawStatus === 'รอตรวจสอบ') mappedStatus = 'รอการตรวจสอบ';
+
+    const computedPaymentStatus = (mappedStatus === 'รอการตรวจสอบ' || rawStatus === 'รอตรวจสอบ' || o.payment_status === 'รอตรวจสอบ')
+      ? 'รอตรวจสอบ'
+      : (mappedStatus === 'จัดส่งแล้ว' || mappedStatus === 'กำลังจัดส่งไปให้ทางขนส่ง' || o.payment_status === 'ชำระเงินแล้ว')
+        ? 'ชำระเงินแล้ว'
+        : (o.payment_status || 'รอตรวจสอบ');
+
+    return {
+      id: o.order_id.toString(),
+      username: o.user?.username || 'ไม่ทราบชื่อ',
+      phone: o.user?.phone || undefined,
+      shippingAddress: o.shipping_address || '',
+      items: (o.orderDetails || []).map((od: any) => ({
+        productName: od.product?.product_name || 'ไม่ทราบสินค้า',
+        quantity: od.quantity,
+        price: typeof od.price === 'object' && od.price?.toNumber ? od.price.toNumber() : Number(od.price || 0),
+        unit: od.product?.unit || 'กก.'
+      })),
+      totalPrice: typeof o.total_price === 'object' && o.total_price?.toNumber ? o.total_price.toNumber() : Number(o.total_price || 0),
+      paymentMethod: o.payment_method || 'พร้อมเพย์',
+      paymentStatus: computedPaymentStatus,
+      orderStatus: mappedStatus,
+      createdAt: o.created_at ? (typeof o.created_at === 'string' ? o.created_at : o.created_at.toISOString()) : new Date().toISOString(),
+      slipUrl: o.slip_url || '',
+      refundSlipUrl: o.refund_slip_url || '',
+      trackingImageUrl: o.tracking_image_url || ''
+    };
+  });
 }
 
 export async function getReviews() {
@@ -210,10 +249,10 @@ export async function createUser(data: { username: string; email: string; passwo
     data: {
       username: data.username,
       email: data.email,
-      password: data.password || 'default_password',
+      password: data.password || '123456',
       phone: data.phone || null,
       role: data.role || 'User',
-      profile_image: data.profileImage || null,
+      profile_image: data.profileImage || null
     }
   });
 }
@@ -240,14 +279,23 @@ export async function deleteUser(email: string) {
 
 export async function createOrder(data: {
   email: string;
+  items: { productName: string; quantity: number; price: number; unit: string }[];
   totalPrice: number;
   paymentMethod: string;
-  paymentStatus: string;
+  paymentStatus?: string;
   orderStatus: string;
   shippingAddress?: string;
   slipUrl?: string;
-  items: { productName: string; quantity: number; price: number }[]
 }) {
+  try {
+    await prisma.$executeRawUnsafe(`ALTER TABLE orders ADD COLUMN IF NOT EXISTS status VARCHAR(50);`);
+    await prisma.$executeRawUnsafe(`ALTER TABLE orders ADD COLUMN IF NOT EXISTS slip_url TEXT;`);
+    await prisma.$executeRawUnsafe(`ALTER TABLE orders ADD COLUMN IF NOT EXISTS tracking_image_url TEXT;`);
+    await prisma.$executeRawUnsafe(`ALTER TABLE orders ADD COLUMN IF NOT EXISTS refund_slip_url TEXT;`);
+  } catch (e) {
+    // Ignore ALTER errors
+  }
+
   const user = await prisma.user.findUnique({ where: { email: data.email } });
 
   // Find products by name to get their IDs
@@ -256,54 +304,108 @@ export async function createOrder(data: {
     where: { product_name: { in: productNames } }
   });
 
-  const order = await prisma.$transaction(async (tx) => {
-    const created = await tx.order.create({
-      data: {
-        user_id: user?.user_id,
-        total_price: data.totalPrice,
-        payment_method: data.paymentMethod,
-        payment_status: data.paymentStatus,
-        order_status: data.orderStatus,
-        shipping_address: data.shippingAddress || null,
-        slip_url: data.slipUrl || null,
-        orderDetails: {
-          create: data.items.map(item => {
-            const product = products.find(p => p.product_name === item.productName);
-            return {
-              product_id: product?.product_id,
-              quantity: item.quantity,
-              price: item.price
-            };
-          })
+  const statusValue = data.orderStatus || data.paymentStatus || 'รอการตรวจสอบ';
+
+  try {
+    const order = await prisma.$transaction(async (tx) => {
+      const created = await tx.order.create({
+        data: {
+          user_id: user?.user_id,
+          total_price: data.totalPrice,
+          payment_method: data.paymentMethod,
+          status: statusValue,
+          shipping_address: data.shippingAddress || null,
+          slip_url: data.slipUrl || null,
+          orderDetails: {
+            create: data.items.map(item => {
+              const product = products.find(p => p.product_name === item.productName);
+              return {
+                product_id: product?.product_id,
+                quantity: item.quantity,
+                price: item.price
+              };
+            })
+          }
+        }
+      });
+
+      for (const item of data.items) {
+        const product = products.find(p => p.product_name === item.productName);
+        if (product) {
+          await tx.product.update({
+            where: { product_id: product.product_id },
+            data: { stock: Math.max(0, product.stock - item.quantity) }
+          });
         }
       }
+
+      return created;
     });
 
-    for (const item of data.items) {
-      const product = products.find(p => p.product_name === item.productName);
-      if (product) {
-        await tx.product.update({
-          where: { product_id: product.product_id },
-          data: { stock: Math.max(0, product.stock - item.quantity) }
-        });
+    revalidatePath('/admin');
+    revalidatePath('/account');
+    revalidatePath('/');
+    return { id: order.order_id.toString() };
+  } catch (err: any) {
+    console.warn('Prisma ORM createOrder failed, attempting Raw SQL fallback:', err?.message || err);
+
+    // Fallback: Raw SQL insertion
+    const insertedOrders: any[] = await prisma.$queryRawUnsafe(
+      `INSERT INTO orders (user_id, total_price, payment_method, status, shipping_address, slip_url)
+       VALUES ($1, $2, $3, $4, $5, $6)
+       RETURNING order_id`,
+      user?.user_id || null,
+      data.totalPrice,
+      data.paymentMethod,
+      statusValue,
+      data.shippingAddress || null,
+      data.slipUrl || null
+    );
+
+    const orderId = insertedOrders[0]?.order_id;
+
+    if (orderId) {
+      for (const item of data.items) {
+        const product = products.find(p => p.product_name === item.productName);
+        await prisma.$executeRawUnsafe(
+          `INSERT INTO order_details (order_id, product_id, quantity, price) VALUES ($1, $2, $3, $4)`,
+          orderId,
+          product?.product_id || null,
+          item.quantity,
+          item.price
+        );
+
+        if (product) {
+          await prisma.$executeRawUnsafe(
+            `UPDATE products SET stock = GREATEST(0, stock - $1) WHERE product_id = $2`,
+            item.quantity,
+            product.product_id
+          );
+        }
       }
+      revalidatePath('/admin');
+      revalidatePath('/account');
+      revalidatePath('/');
+      return { id: orderId.toString() };
     }
 
-    return created;
-  });
-
-  return { id: order.order_id.toString() };
+    throw err;
+  }
 }
 
-export async function updateOrder(id: string, data: { paymentStatus?: string; orderStatus?: string; refundSlipUrl?: string }) {
+export async function updateOrder(id: string, data: { paymentStatus?: string; orderStatus?: string; refundSlipUrl?: string; trackingImageUrl?: string }) {
   const orderId = parseInt(id.replace(/[^0-9]/g, ''), 10);
   if (isNaN(orderId)) return null;
 
+  const targetStatus = data.orderStatus || data.paymentStatus;
+
   try {
     const updateData: any = {};
-    if (data.paymentStatus) updateData.payment_status = data.paymentStatus;
-    if (data.orderStatus) updateData.order_status = data.orderStatus;
+    if (targetStatus) {
+      updateData.status = targetStatus;
+    }
     if (data.refundSlipUrl !== undefined) updateData.refund_slip_url = data.refundSlipUrl;
+    if (data.trackingImageUrl !== undefined) updateData.tracking_image_url = data.trackingImageUrl;
     const res = await prisma.order.update({
       where: { order_id: orderId },
       data: updateData
@@ -314,14 +416,33 @@ export async function updateOrder(id: string, data: { paymentStatus?: string; or
     return res;
   } catch (err: any) {
     console.warn('Prisma update failed, executing raw SQL fallback:', err?.message);
-    if (data.refundSlipUrl !== undefined && data.paymentStatus) {
-      await prisma.$executeRaw`UPDATE orders SET payment_status = ${data.paymentStatus}, refund_slip_url = ${data.refundSlipUrl} WHERE order_id = ${orderId}`;
-    } else if (data.refundSlipUrl !== undefined) {
-      await prisma.$executeRaw`UPDATE orders SET refund_slip_url = ${data.refundSlipUrl} WHERE order_id = ${orderId}`;
-    } else if (data.paymentStatus) {
-      await prisma.$executeRaw`UPDATE orders SET payment_status = ${data.paymentStatus} WHERE order_id = ${orderId}`;
-    } else if (data.orderStatus) {
-      await prisma.$executeRaw`UPDATE orders SET order_status = ${data.orderStatus} WHERE order_id = ${orderId}`;
+
+    try {
+      await prisma.$executeRawUnsafe(`ALTER TABLE orders ADD COLUMN IF NOT EXISTS status VARCHAR(50);`);
+      await prisma.$executeRawUnsafe(`ALTER TABLE orders ADD COLUMN IF NOT EXISTS tracking_image_url TEXT;`);
+    } catch (e) {
+      // ignore
+    }
+
+    try {
+      if (data.trackingImageUrl !== undefined && targetStatus) {
+        await prisma.$executeRaw`UPDATE orders SET status = ${targetStatus}, tracking_image_url = ${data.trackingImageUrl} WHERE order_id = ${orderId}`;
+      } else if (data.trackingImageUrl !== undefined) {
+        await prisma.$executeRaw`UPDATE orders SET tracking_image_url = ${data.trackingImageUrl} WHERE order_id = ${orderId}`;
+      } else if (data.refundSlipUrl !== undefined && targetStatus) {
+        await prisma.$executeRaw`UPDATE orders SET status = ${targetStatus}, refund_slip_url = ${data.refundSlipUrl} WHERE order_id = ${orderId}`;
+      } else if (data.refundSlipUrl !== undefined) {
+        await prisma.$executeRaw`UPDATE orders SET refund_slip_url = ${data.refundSlipUrl} WHERE order_id = ${orderId}`;
+      } else if (targetStatus) {
+        await prisma.$executeRaw`UPDATE orders SET status = ${targetStatus} WHERE order_id = ${orderId}`;
+      }
+    } catch (fallbackErr: any) {
+      console.warn('Raw SQL status update failed, fallback to order_status:', fallbackErr?.message);
+      if (targetStatus) {
+        try {
+          await prisma.$executeRaw`UPDATE orders SET order_status = ${targetStatus} WHERE order_id = ${orderId}`;
+        } catch (e2) {}
+      }
     }
     revalidatePath('/account');
     revalidatePath('/admin');

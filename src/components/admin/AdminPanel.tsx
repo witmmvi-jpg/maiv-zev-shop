@@ -11,6 +11,7 @@ import { getDashboardStats, getProducts, createProduct, updateProduct, deletePro
 import { uploadFile, getChats, sendMessage, markChatRead, sendEmail } from '@/app/actions';
 import LoginModal from '@/components/modals/LoginModal';
 import RichTextEditor from '@/components/admin/RichTextEditor';
+import { compressImage } from '@/lib/imageCompressor';
 
 export default function AdminPanel() {
   const { currentUser, isLoaded } = useAuth();
@@ -50,6 +51,36 @@ export default function AdminPanel() {
   // Dashboard states
   const [dashboardPeriod, setDashboardPeriod] = useState<'daily' | 'monthly' | 'yearly'>('daily');
   const [bestSellerMonth, setBestSellerMonth] = useState<string>(getLocalYearMonthDynamic());
+  const [dashboardFilterMode, setDashboardFilterMode] = useState<'month' | 'year' | 'range' | 'all'>('month');
+  const [selectedDashboardMonth, setSelectedDashboardMonth] = useState<string>(getLocalYearMonthDynamic());
+  const [selectedDashboardYear, setSelectedDashboardYear] = useState<string>(new Date().getFullYear().toString());
+  const [selectedDashboardStartDate, setSelectedDashboardStartDate] = useState<string>('');
+  const [selectedDashboardEndDate, setSelectedDashboardEndDate] = useState<string>('');
+  
+  // Breakdown Graph Filter states
+  const [breakdownSubMode, setBreakdownSubMode] = useState<'all' | 'single' | 'range'>('all');
+  const [singleDate, setSingleDate] = useState<string>('');
+  const [startDate, setStartDate] = useState<string>('');
+  const [endDate, setEndDate] = useState<string>('');
+
+  const [singleMonthFilter, setSingleMonthFilter] = useState<string>('');
+  const [startMonthFilter, setStartMonthFilter] = useState<string>('');
+  const [endMonthFilter, setEndMonthFilter] = useState<string>('');
+
+  const [singleYearFilter, setSingleYearFilter] = useState<string>('');
+  const [startYearFilter, setStartYearFilter] = useState<string>('');
+  const [endYearFilter, setEndYearFilter] = useState<string>('');
+  
+  // Best Sellers Card Filter states
+  const [bestSellerMode, setBestSellerMode] = useState<'month' | 'year' | 'range' | 'all'>('month');
+  const [bestSellerSelectedMonth, setBestSellerSelectedMonth] = useState<string>(getLocalYearMonthDynamic());
+  const [bestSellerSelectedYear, setBestSellerSelectedYear] = useState<string>(new Date().getFullYear().toString());
+  const [bestSellerStartDate, setBestSellerStartDate] = useState<string>('');
+  const [bestSellerEndDate, setBestSellerEndDate] = useState<string>('');
+  
+  // Saving loading states
+  const [isSavingProduct, setIsSavingProduct] = useState<boolean>(false);
+  const [isSavingCategory, setIsSavingCategory] = useState<boolean>(false);
   
   // DB States
   const [isAdminDataLoading, setIsAdminDataLoading] = useState<boolean>(true);
@@ -392,11 +423,6 @@ export default function AdminPanel() {
                     }`}
                 >
                   <span>📦</span> คำสั่งซื้อ
-                  {orders.filter(o => o.paymentStatus === 'รอตรวจสอบ').length > 0 && (
-                    <span className="ml-auto bg-amber-500 text-white text-[10px] px-2 py-0.5 rounded-full font-bold animate-pulse">
-                      {orders.filter(o => o.paymentStatus === 'รอตรวจสอบ').length}
-                    </span>
-                  )}
                 </button>
 
                 <button
@@ -413,6 +439,11 @@ export default function AdminPanel() {
                     }`}
                 >
                   <span>💳</span> ช่องทางชำระเงิน & ยอดขาย
+                  {orders.filter(o => o.orderStatus === 'รอการตรวจสอบ').length > 0 && (
+                    <span className="ml-auto bg-amber-500 text-white text-[10px] px-2 py-0.5 rounded-full font-bold animate-pulse">
+                      {orders.filter(o => o.orderStatus === 'รอการตรวจสอบ').length}
+                    </span>
+                  )}
                 </button>
 
                 <button
@@ -452,118 +483,401 @@ export default function AdminPanel() {
                 {/* 0. SALES DASHBOARD TAB */}
                 {adminTab === 'dashboard' && (
                   <div className="space-y-8 animate-in fade-in duration-300">
-                    <div>
-                      <h3 className="text-xl font-bold text-stone-900">แผงควบคุมและรายงานยอดขาย (Sales Dashboard)</h3>
-                      <p className="text-sm text-stone-500 font-medium">ข้อมูลสรุปและวิเคราะห์ผลการดำเนินงานยอดขายประจำสวนของเรา</p>
-                    </div>
+                    {/* Header + Month & Year Filter Selector */}
+                    {(() => {
+                      const validOrders = orders.filter(o => o.orderStatus !== 'ยกเลิกการสั่งซื้อ' && o.orderStatus !== 'ยกเลิก');
 
-                    {/* Stats summary cards */}
-                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
-                      <div className="p-6 rounded-3xl bg-white border border-stone-200/60 shadow-sm hover:shadow-md transition-shadow">
-                        <div className="flex items-center gap-3">
-                          <span className="p-3 bg-emerald-50 rounded-2xl text-emerald-700 text-xl">💰</span>
-                          <div>
-                            <p className="text-xs font-bold text-stone-400 uppercase tracking-wider">ยอดขายรวมทั้งหมด</p>
-                            <p className="text-2xl font-extrabold text-stone-900 mt-1">
-                              {orders.filter(o => o.paymentStatus === 'ชำระเงินแล้ว').reduce((sum, o) => sum + o.totalPrice, 0).toLocaleString()} บาท
-                            </p>
-                          </div>
-                        </div>
-                      </div>
+                      // Available Months YYYY-MM
+                      const availableMonths = Array.from(new Set(
+                        validOrders
+                          .filter(o => o.createdAt && typeof o.createdAt === 'string')
+                          .map(o => o.createdAt.substring(0, 7))
+                      )).sort((a, b) => b.localeCompare(a));
 
-                      <div className="p-6 rounded-3xl bg-white border border-stone-200/60 shadow-sm hover:shadow-md transition-shadow">
-                        <div className="flex items-center gap-3">
-                          <span className="p-3 bg-purple-50 rounded-2xl text-purple-700 text-xl">📅</span>
-                          <div>
-                            <p className="text-xs font-bold text-stone-400 uppercase tracking-wider">ยอดขายเดือนนี้ ({new Date().toLocaleDateString('th-TH', { month: 'long', year: 'numeric' })})</p>
-                            <p className="text-2xl font-extrabold text-stone-900 mt-1">
-                              {orders
-                                .filter(o => o.paymentStatus === 'ชำระเงินแล้ว' && o.createdAt && typeof o.createdAt === 'string' && o.createdAt.substring(0, 7) === getLocalYearMonth())
-                                .reduce((sum, o) => sum + o.totalPrice, 0).toLocaleString()} บาท
-                            </p>
-                          </div>
-                        </div>
-                      </div>
+                      const currentMonthStr = getLocalYearMonthDynamic();
+                      if (!availableMonths.includes(currentMonthStr)) {
+                        availableMonths.unshift(currentMonthStr);
+                      }
 
-                      <div className="p-6 rounded-3xl bg-white border border-stone-200/60 shadow-sm hover:shadow-md transition-shadow">
-                        <div className="flex items-center gap-3">
-                          <span className="p-3 bg-amber-50 rounded-2xl text-amber-700 text-xl">📦</span>
-                          <div>
-                            <p className="text-xs font-bold text-stone-400 uppercase tracking-wider">ออเดอร์ชำระเงินสำเร็จ</p>
-                            <p className="text-2xl font-extrabold text-stone-900 mt-1">
-                              {orders.filter(o => o.paymentStatus === 'ชำระเงินแล้ว').length} รายการ
-                            </p>
-                          </div>
-                        </div>
-                      </div>
+                      // Available Years YYYY
+                      const availableYears = Array.from(new Set(
+                        validOrders
+                          .filter(o => o.createdAt && typeof o.createdAt === 'string')
+                          .map(o => o.createdAt.substring(0, 4))
+                      )).sort((a, b) => b.localeCompare(a));
 
-                      <div className="p-6 rounded-3xl bg-white border border-stone-200/60 shadow-sm hover:shadow-md transition-shadow">
-                        <div className="flex items-center gap-3">
-                          <span className="p-3 bg-red-50 rounded-2xl text-red-700 text-xl">🔥</span>
-                          <div>
-                            <p className="text-xs font-bold text-stone-400 uppercase tracking-wider">สินค้าขายดีสุดเดือนนี้</p>
-                            <p className="text-sm font-extrabold text-stone-900 mt-1 leading-snug break-words">
-                              {(() => {
-                                const currentMonth = getLocalYearMonth();
-                                const productSales: { [name: string]: number } = {};
-                                orders
-                                  .filter(o => o.paymentStatus === 'ชำระเงินแล้ว' && o.createdAt && typeof o.createdAt === 'string' && o.createdAt.substring(0, 7) === currentMonth)
-                                  .forEach(o => {
-                                    o.items.forEach(item => {
-                                      productSales[item.productName] = (productSales[item.productName] || 0) + item.quantity;
-                                    });
-                                  });
-                                let bestProduct = 'ไม่มีข้อมูล';
-                                let maxQty = 0;
-                                Object.entries(productSales).forEach(([name, qty]) => {
-                                  if (qty > maxQty) {
-                                    maxQty = qty;
-                                    bestProduct = name;
-                                  }
-                                });
-                                return maxQty > 0 ? `${bestProduct} (${maxQty} กก.)` : 'ไม่มีข้อมูล';
-                              })()}
-                            </p>
+                      const currentYearStr = new Date().getFullYear().toString();
+                      if (!availableYears.includes(currentYearStr)) {
+                        availableYears.unshift(currentYearStr);
+                      }
+
+                      // Filter orders according to dashboardFilterMode
+                      const filteredOrders = validOrders.filter(o => {
+                        if (!o.createdAt || typeof o.createdAt !== 'string') return true;
+                        const d = o.createdAt.substring(0, 10);
+                        if (dashboardFilterMode === 'month') {
+                          return o.createdAt.substring(0, 7) === selectedDashboardMonth;
+                        }
+                        if (dashboardFilterMode === 'year') {
+                          return o.createdAt.substring(0, 4) === selectedDashboardYear;
+                        }
+                        if (dashboardFilterMode === 'range') {
+                          if (selectedDashboardStartDate && d < selectedDashboardStartDate) return false;
+                          if (selectedDashboardEndDate && d > selectedDashboardEndDate) return false;
+                          return true;
+                        }
+                        return true; // 'all'
+                      });
+
+                      const periodRevenue = filteredOrders.reduce((sum, o) => sum + o.totalPrice, 0);
+
+                      // Calculate best selling product in filtered range
+                      const productSales: { [name: string]: number } = {};
+                      filteredOrders.forEach(o => {
+                        o.items.forEach(item => {
+                          productSales[item.productName] = (productSales[item.productName] || 0) + item.quantity;
+                        });
+                      });
+                      let bestProduct = 'ไม่มีข้อมูล';
+                      let maxQty = 0;
+                      Object.entries(productSales).forEach(([name, qty]) => {
+                        if (qty > maxQty) {
+                          maxQty = qty;
+                          bestProduct = name;
+                        }
+                      });
+                      const bestProductText = maxQty > 0 ? `${bestProduct} (${maxQty} กก.)` : 'ไม่มีข้อมูล';
+
+                      // Format Month display text in Thai
+                      const formatMonthDisplay = (ymStr: string) => {
+                        const [y, m] = ymStr.split('-');
+                        const date = new Date(parseInt(y), parseInt(m) - 1, 1);
+                        return date.toLocaleDateString('th-TH', { month: 'long', year: 'numeric' });
+                      };
+
+                      // Format Year display text in Thai (BE)
+                      const formatYearDisplay = (yStr: string) => {
+                        const y = parseInt(yStr);
+                        return `ปี พ.ศ. ${y + 543} (${yStr})`;
+                      };
+
+                      return (
+                        <>
+                          <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4 bg-white p-6 rounded-3xl border border-stone-200/60 shadow-sm">
+                            <div>
+                              <h3 className="text-xl font-bold text-stone-900">แผงควบคุมและรายงานยอดขาย (Sales Dashboard)</h3>
+                              <p className="text-sm text-stone-500 font-medium">ข้อมูลสรุปและวิเคราะห์ผลการดำเนินงานยอดขายประจำสวนของเรา</p>
+                            </div>
+
+                            {/* Month / Year / Date Range Selector Bar */}
+                            <div className="flex flex-wrap items-center gap-3 bg-stone-50 p-2 rounded-2xl border border-stone-150">
+                              {/* Filter Mode Toggle */}
+                              <div className="flex bg-stone-200/70 p-1 rounded-xl">
+                                <button
+                                  onClick={() => setDashboardFilterMode('month')}
+                                  className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${dashboardFilterMode === 'month' ? 'bg-white text-purple-700 shadow-sm' : 'text-stone-600 hover:text-stone-900'}`}
+                                >
+                                  📅 รายเดือน
+                                </button>
+                                <button
+                                  onClick={() => setDashboardFilterMode('year')}
+                                  className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${dashboardFilterMode === 'year' ? 'bg-white text-purple-700 shadow-sm' : 'text-stone-600 hover:text-stone-900'}`}
+                                >
+                                  🗓️ รายปี
+                                </button>
+                                <button
+                                  onClick={() => setDashboardFilterMode('range')}
+                                  className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${dashboardFilterMode === 'range' ? 'bg-white text-purple-700 shadow-sm' : 'text-stone-600 hover:text-stone-900'}`}
+                                >
+                                  📆 เลือกช่วงเวลา
+                                </button>
+                                <button
+                                  onClick={() => setDashboardFilterMode('all')}
+                                  className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${dashboardFilterMode === 'all' ? 'bg-white text-purple-700 shadow-sm' : 'text-stone-600 hover:text-stone-900'}`}
+                                >
+                                  🌐 ทั้งหมด
+                                </button>
+                              </div>
+
+                              {/* Month Dropdown Select */}
+                              {dashboardFilterMode === 'month' && (
+                                <select
+                                  value={selectedDashboardMonth}
+                                  onChange={(e) => setSelectedDashboardMonth(e.target.value)}
+                                  className="bg-white border border-stone-300 rounded-xl px-3 py-1.5 text-xs font-bold text-purple-800 shadow-sm focus:outline-none cursor-pointer"
+                                >
+                                  {availableMonths.map(m => (
+                                    <option key={m} value={m}>
+                                      {formatMonthDisplay(m)}
+                                    </option>
+                                  ))}
+                                </select>
+                              )}
+
+                              {/* Year Dropdown Select */}
+                              {dashboardFilterMode === 'year' && (
+                                <select
+                                  value={selectedDashboardYear}
+                                  onChange={(e) => setSelectedDashboardYear(e.target.value)}
+                                  className="bg-white border border-stone-300 rounded-xl px-3 py-1.5 text-xs font-bold text-purple-800 shadow-sm focus:outline-none cursor-pointer"
+                                >
+                                  {availableYears.map(y => (
+                                    <option key={y} value={y}>
+                                      {formatYearDisplay(y)}
+                                    </option>
+                                  ))}
+                                </select>
+                              )}
+
+                              {/* Date Range Selectors */}
+                              {dashboardFilterMode === 'range' && (
+                                <div className="flex flex-wrap items-center gap-2 text-xs font-bold text-stone-700">
+                                  <span>เริ่ม:</span>
+                                  <input
+                                    type="date"
+                                    value={selectedDashboardStartDate}
+                                    onChange={(e) => setSelectedDashboardStartDate(e.target.value)}
+                                    className="bg-white border border-stone-300 rounded-xl px-2 py-1 text-xs font-bold text-purple-800 shadow-sm focus:outline-none"
+                                  />
+                                  <span>ถึง:</span>
+                                  <input
+                                    type="date"
+                                    value={selectedDashboardEndDate}
+                                    onChange={(e) => setSelectedDashboardEndDate(e.target.value)}
+                                    className="bg-white border border-stone-300 rounded-xl px-2 py-1 text-xs font-bold text-purple-800 shadow-sm focus:outline-none"
+                                  />
+                                </div>
+                              )}
+                            </div>
                           </div>
-                        </div>
-                      </div>
-                    </div>
+
+                          {/* Stats summary cards */}
+                          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
+                            {/* Card 1: All time total revenue */}
+                            <div className="p-6 rounded-3xl bg-white border border-stone-200/60 shadow-sm hover:shadow-md transition-shadow">
+                              <div className="flex items-center gap-3">
+                                <span className="p-3 bg-emerald-50 rounded-2xl text-emerald-700 text-xl">💰</span>
+                                <div>
+                                  <p className="text-xs font-bold text-stone-400 uppercase tracking-wider">ยอดขายรวมทั้งหมด (สะสม)</p>
+                                  <p className="text-2xl font-extrabold text-stone-900 mt-1">
+                                    {validOrders.reduce((sum, o) => sum + o.totalPrice, 0).toLocaleString()} บาท
+                                  </p>
+                                </div>
+                              </div>
+                            </div>
+
+                            {/* Card 2: Period Revenue */}
+                            <div className="p-6 rounded-3xl bg-white border border-stone-200/60 shadow-sm hover:shadow-md transition-shadow">
+                              <div className="flex items-center gap-3">
+                                <span className="p-3 bg-purple-50 rounded-2xl text-purple-700 text-xl">
+                                  {dashboardFilterMode === 'year' ? '🗓️' : dashboardFilterMode === 'range' ? '📆' : '📅'}
+                                </span>
+                                <div>
+                                  <p className="text-xs font-bold text-stone-400 uppercase tracking-wider">
+                                    {dashboardFilterMode === 'month' ? `ยอดขาย (${formatMonthDisplay(selectedDashboardMonth)})` :
+                                     dashboardFilterMode === 'year' ? `ยอดขาย (ปี ${parseInt(selectedDashboardYear) + 543})` :
+                                     dashboardFilterMode === 'range' ? 'ยอดขายในช่วงวันที่เลือก' :
+                                     'ยอดขายรวมสะสม'}
+                                  </p>
+                                  <p className="text-2xl font-extrabold text-stone-900 mt-1">
+                                    {periodRevenue.toLocaleString()} บาท
+                                  </p>
+                                </div>
+                              </div>
+                            </div>
+
+                            {/* Card 3: Order count */}
+                            <div className="p-6 rounded-3xl bg-white border border-stone-200/60 shadow-sm hover:shadow-md transition-shadow">
+                              <div className="flex items-center gap-3">
+                                <span className="p-3 bg-amber-50 rounded-2xl text-amber-700 text-xl">📦</span>
+                                <div>
+                                  <p className="text-xs font-bold text-stone-400 uppercase tracking-wider">
+                                    {dashboardFilterMode === 'month' ? 'ออเดอร์ในเดือนนี้' :
+                                     dashboardFilterMode === 'year' ? 'ออเดอร์ในปีนี้' :
+                                     dashboardFilterMode === 'range' ? 'ออเดอร์ในช่วงเวลานี้' :
+                                     'ออเดอร์ทั้งหมดในระบบ'}
+                                  </p>
+                                  <p className="text-2xl font-extrabold text-stone-900 mt-1">
+                                    {filteredOrders.length} รายการ
+                                  </p>
+                                </div>
+                              </div>
+                            </div>
+
+                            {/* Card 4: Best product in period */}
+                            <div className="p-6 rounded-3xl bg-white border border-stone-200/60 shadow-sm hover:shadow-md transition-shadow">
+                              <div className="flex items-center gap-3">
+                                <span className="p-3 bg-red-50 rounded-2xl text-red-700 text-xl">🔥</span>
+                                <div>
+                                  <p className="text-xs font-bold text-stone-400 uppercase tracking-wider">
+                                    {dashboardFilterMode === 'month' ? 'สินค้าขายดีสุดเดือนนี้' :
+                                     dashboardFilterMode === 'year' ? 'สินค้าขายดีสุดปีนี้' :
+                                     dashboardFilterMode === 'range' ? 'สินค้าขายดีสุดช่วงนี้' :
+                                     'สินค้าขายดีที่สุดสะสม'}
+                                  </p>
+                                  <p className="text-sm font-extrabold text-stone-900 mt-1 leading-snug break-words">
+                                    {bestProductText}
+                                  </p>
+                                </div>
+                              </div>
+                            </div>
+                          </div>
+                        </>
+                      );
+                    })()}
 
                     {/* Breakdown Graphs and Best Sellers */}
                     <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
                       {/* Left: Sales breakdown */}
                       <div className="lg:col-span-2 bg-white rounded-3xl p-6 border border-stone-200/60 shadow-sm space-y-6">
-                        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 pb-4 border-b border-stone-100">
-                          <h4 className="font-bold text-stone-900 flex items-center gap-2">
-                            <span>📈</span> รายงานสถิติตามช่วงเวลา
-                          </h4>
-                          {/* Period Selector Tabs */}
-                          <div className="flex bg-stone-100 p-1 rounded-xl">
-                            <button
-                              onClick={() => setDashboardPeriod('daily')}
-                              className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${dashboardPeriod === 'daily' ? 'bg-white text-emerald-800 shadow-sm' : 'text-stone-500 hover:text-stone-800'}`}
-                            >
-                              รายวัน
-                            </button>
-                            <button
-                              onClick={() => setDashboardPeriod('monthly')}
-                              className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${dashboardPeriod === 'monthly' ? 'bg-white text-emerald-800 shadow-sm' : 'text-stone-500 hover:text-stone-800'}`}
-                            >
-                              รายเดือน
-                            </button>
-                            <button
-                              onClick={() => setDashboardPeriod('yearly')}
-                              className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${dashboardPeriod === 'yearly' ? 'bg-white text-emerald-800 shadow-sm' : 'text-stone-500 hover:text-stone-800'}`}
-                            >
-                              รายปี
-                            </button>
+                        <div className="flex flex-col gap-4 pb-4 border-b border-stone-100">
+                          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+                            <h4 className="font-bold text-stone-900 flex items-center gap-2">
+                              <span>📈</span> รายงานสถิติตามช่วงเวลา
+                            </h4>
+                            {/* Period Selector Tabs */}
+                            <div className="flex bg-stone-100 p-1 rounded-xl">
+                              <button
+                                onClick={() => { setDashboardPeriod('daily'); setBreakdownSubMode('all'); }}
+                                className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${dashboardPeriod === 'daily' ? 'bg-white text-emerald-800 shadow-sm' : 'text-stone-500 hover:text-stone-800'}`}
+                              >
+                                รายวัน
+                              </button>
+                              <button
+                                onClick={() => { setDashboardPeriod('monthly'); setBreakdownSubMode('all'); }}
+                                className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${dashboardPeriod === 'monthly' ? 'bg-white text-emerald-800 shadow-sm' : 'text-stone-500 hover:text-stone-800'}`}
+                              >
+                                รายเดือน
+                              </button>
+                              <button
+                                onClick={() => { setDashboardPeriod('yearly'); setBreakdownSubMode('all'); }}
+                                className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${dashboardPeriod === 'yearly' ? 'bg-white text-emerald-800 shadow-sm' : 'text-stone-500 hover:text-stone-800'}`}
+                              >
+                                รายปี
+                              </button>
+                            </div>
+                          </div>
+
+                          {/* Sub-Filter Controls for Specific Date / Date Range / Month Range / Year Range */}
+                          <div className="flex flex-wrap items-center gap-3 bg-stone-50 p-3 rounded-2xl border border-stone-150 text-xs">
+                            <div className="flex bg-stone-200/80 p-0.5 rounded-lg">
+                              <button
+                                onClick={() => setBreakdownSubMode('all')}
+                                className={`px-2.5 py-1 rounded-md font-bold transition-all cursor-pointer ${breakdownSubMode === 'all' ? 'bg-white text-stone-900 shadow-sm' : 'text-stone-600'}`}
+                              >
+                                🌐 แสดงทั้งหมด
+                              </button>
+                              <button
+                                onClick={() => setBreakdownSubMode('single')}
+                                className={`px-2.5 py-1 rounded-md font-bold transition-all cursor-pointer ${breakdownSubMode === 'single' ? 'bg-white text-purple-700 shadow-sm' : 'text-stone-600'}`}
+                              >
+                                🎯 เลือกเจาะจง
+                              </button>
+                              <button
+                                onClick={() => setBreakdownSubMode('range')}
+                                className={`px-2.5 py-1 rounded-md font-bold transition-all cursor-pointer ${breakdownSubMode === 'range' ? 'bg-white text-purple-700 shadow-sm' : 'text-stone-600'}`}
+                              >
+                                📅 เลือกช่วงเวลา (ตั้งแต่... ถึง...)
+                              </button>
+                            </div>
+
+                            {/* Sub-controls when 'single' */}
+                            {breakdownSubMode === 'single' && (
+                              <div className="flex items-center gap-2">
+                                {dashboardPeriod === 'daily' && (
+                                  <input
+                                    type="date"
+                                    value={singleDate}
+                                    onChange={(e) => setSingleDate(e.target.value)}
+                                    className="bg-white border border-stone-300 rounded-xl px-2.5 py-1 text-xs font-bold text-stone-800 focus:outline-none"
+                                  />
+                                )}
+                                {dashboardPeriod === 'monthly' && (
+                                  <input
+                                    type="month"
+                                    value={singleMonthFilter}
+                                    onChange={(e) => setSingleMonthFilter(e.target.value)}
+                                    className="bg-white border border-stone-300 rounded-xl px-2.5 py-1 text-xs font-bold text-stone-800 focus:outline-none"
+                                  />
+                                )}
+                                {dashboardPeriod === 'yearly' && (
+                                  <input
+                                    type="number"
+                                    placeholder="เช่น 2026"
+                                    value={singleYearFilter}
+                                    onChange={(e) => setSingleYearFilter(e.target.value)}
+                                    className="w-24 bg-white border border-stone-300 rounded-xl px-2.5 py-1 text-xs font-bold text-stone-800 focus:outline-none"
+                                  />
+                                )}
+                              </div>
+                            )}
+
+                            {/* Sub-controls when 'range' */}
+                            {breakdownSubMode === 'range' && (
+                              <div className="flex flex-wrap items-center gap-2 font-bold text-stone-600">
+                                <span>ตั้งแต่วันที่/ช่วง:</span>
+                                {dashboardPeriod === 'daily' && (
+                                  <>
+                                    <input
+                                      type="date"
+                                      value={startDate}
+                                      onChange={(e) => setStartDate(e.target.value)}
+                                      className="bg-white border border-stone-300 rounded-xl px-2 py-1 text-xs font-bold text-stone-800 focus:outline-none"
+                                    />
+                                    <span>ถึง:</span>
+                                    <input
+                                      type="date"
+                                      value={endDate}
+                                      onChange={(e) => setEndDate(e.target.value)}
+                                      className="bg-white border border-stone-300 rounded-xl px-2 py-1 text-xs font-bold text-stone-800 focus:outline-none"
+                                    />
+                                  </>
+                                )}
+                                {dashboardPeriod === 'monthly' && (
+                                  <>
+                                    <input
+                                      type="month"
+                                      value={startMonthFilter}
+                                      onChange={(e) => setStartMonthFilter(e.target.value)}
+                                      className="bg-white border border-stone-300 rounded-xl px-2 py-1 text-xs font-bold text-stone-800 focus:outline-none"
+                                    />
+                                    <span>ถึง:</span>
+                                    <input
+                                      type="month"
+                                      value={endMonthFilter}
+                                      onChange={(e) => setEndMonthFilter(e.target.value)}
+                                      className="bg-white border border-stone-300 rounded-xl px-2 py-1 text-xs font-bold text-stone-800 focus:outline-none"
+                                    />
+                                  </>
+                                )}
+                                {dashboardPeriod === 'yearly' && (
+                                  <>
+                                    <input
+                                      type="number"
+                                      placeholder="ปีเริ่ม"
+                                      value={startYearFilter}
+                                      onChange={(e) => setStartYearFilter(e.target.value)}
+                                      className="w-20 bg-white border border-stone-300 rounded-xl px-2 py-1 text-xs font-bold text-stone-800 focus:outline-none"
+                                    />
+                                    <span>ถึง:</span>
+                                    <input
+                                      type="number"
+                                      placeholder="ปีสิ้นสุด"
+                                      value={endYearFilter}
+                                      onChange={(e) => setEndYearFilter(e.target.value)}
+                                      className="w-20 bg-white border border-stone-300 rounded-xl px-2 py-1 text-xs font-bold text-stone-800 focus:outline-none"
+                                    />
+                                  </>
+                                )}
+                              </div>
+                            )}
                           </div>
                         </div>
 
                         {/* List/Graph */}
                         <div className="space-y-4">
                           {(() => {
-                            const paid = orders.filter(o => o.paymentStatus === 'ชำระเงินแล้ว');
+                            const paid = orders.filter(o => o.orderStatus !== 'ยกเลิกการสั่งซื้อ' && o.orderStatus !== 'ยกเลิก');
                             let salesData: [string, number][] = [];
                             if (dashboardPeriod === 'daily') {
                               const daily: { [k: string]: number } = {};
@@ -571,37 +885,62 @@ export default function AdminPanel() {
                                 const d = (o.createdAt && typeof o.createdAt === 'string') ? o.createdAt.substring(0, 10) : '2026-07-07';
                                 daily[d] = (daily[d] || 0) + o.totalPrice;
                               });
-                              salesData = Object.entries(daily).sort((a, b) => b[0].localeCompare(a[0])).slice(0, 10);
+                              let entries = Object.entries(daily);
+
+                              if (breakdownSubMode === 'single' && singleDate) {
+                                entries = entries.filter(([d]) => d === singleDate);
+                              } else if (breakdownSubMode === 'range') {
+                                if (startDate) entries = entries.filter(([d]) => d >= startDate);
+                                if (endDate) entries = entries.filter(([d]) => d <= endDate);
+                              }
+                              salesData = entries.sort((a, b) => b[0].localeCompare(a[0]));
                             } else if (dashboardPeriod === 'monthly') {
                               const monthly: { [k: string]: number } = {};
                               paid.forEach(o => {
                                 const m = (o.createdAt && typeof o.createdAt === 'string') ? o.createdAt.substring(0, 7) : '2026-07';
                                 monthly[m] = (monthly[m] || 0) + o.totalPrice;
                               });
-                              salesData = Object.entries(monthly).sort((a, b) => b[0].localeCompare(a[0]));
+                              let entries = Object.entries(monthly);
+
+                              if (breakdownSubMode === 'single' && singleMonthFilter) {
+                                entries = entries.filter(([m]) => m === singleMonthFilter);
+                              } else if (breakdownSubMode === 'range') {
+                                if (startMonthFilter) entries = entries.filter(([m]) => m >= startMonthFilter);
+                                if (endMonthFilter) entries = entries.filter(([m]) => m <= endMonthFilter);
+                              }
+                              salesData = entries.sort((a, b) => b[0].localeCompare(a[0]));
                             } else {
                               const yearly: { [k: string]: number } = {};
                               paid.forEach(o => {
                                 const y = (o.createdAt && typeof o.createdAt === 'string') ? o.createdAt.substring(0, 4) : '2026';
                                 yearly[y] = (yearly[y] || 0) + o.totalPrice;
                               });
-                              salesData = Object.entries(yearly).sort((a, b) => b[0].localeCompare(a[0]));
+                              let entries = Object.entries(yearly);
+
+                              if (breakdownSubMode === 'single' && singleYearFilter) {
+                                entries = entries.filter(([y]) => y === singleYearFilter);
+                              } else if (breakdownSubMode === 'range') {
+                                if (startYearFilter) entries = entries.filter(([y]) => y >= startYearFilter);
+                                if (endYearFilter) entries = entries.filter(([y]) => y <= endYearFilter);
+                              }
+                              salesData = entries.sort((a, b) => b[0].localeCompare(a[0]));
                             }
 
                             if (salesData.length === 0) {
                               return (
-                                <p className="text-center text-xs text-stone-400 py-10 font-medium">ยังไม่มีข้อมูลยอดขายที่ได้รับชำระเงินสำเร็จ</p>
+                                <p className="text-center text-xs text-stone-400 py-10 font-medium">ไม่พบข้อมูลยอดขายในช่วงเวลาที่เลือกครับ</p>
                               );
                             }
 
                             const maxVal = Math.max(...salesData.map(d => d[1]), 1);
+                            const totalPeriodSum = salesData.reduce((sum, d) => sum + d[1], 0);
 
                             return (
                               <div className="space-y-4">
                                 <div className="overflow-x-auto rounded-2xl border border-stone-100">
                                   <table className="w-full text-left border-collapse text-sm">
                                     <thead>
-                                      <tr className="bg-stone-50 text-stone-505 font-semibold border-b border-stone-100">
+                                      <tr className="bg-stone-50 text-stone-550 font-semibold border-b border-stone-100">
                                         <th className="p-3 pl-4">ช่วงเวลา</th>
                                         <th className="p-3">แนวโน้มยอดขาย</th>
                                         <th className="p-3 text-right pr-4">ยอดขายรวม</th>
@@ -626,6 +965,16 @@ export default function AdminPanel() {
                                         );
                                       })}
                                     </tbody>
+                                    <tfoot className="bg-emerald-50/80 font-bold border-t border-emerald-200 text-xs">
+                                      <tr>
+                                        <td colSpan={2} className="p-3 pl-4 text-emerald-950 font-extrabold">
+                                          💵 ยอดขายรวมทั้งหมดในช่วงที่เลือก:
+                                        </td>
+                                        <td className="p-3 text-right pr-4 font-black text-emerald-800 text-sm">
+                                          {totalPeriodSum.toLocaleString()} บาท
+                                        </td>
+                                      </tr>
+                                    </tfoot>
                                   </table>
                                 </div>
                               </div>
@@ -634,74 +983,186 @@ export default function AdminPanel() {
                         </div>
                       </div>
 
-                      {/* Right: Best Sellers of Month */}
+                      {/* Right: Best Sellers Card with Multi-Mode Filters */}
                       <div className="bg-white rounded-3xl p-6 border border-stone-200/60 shadow-sm space-y-6">
                         {(() => {
-                          const paid = orders.filter(o => o.paymentStatus === 'ชำระเงินแล้ว');
+                          const validOrders = orders.filter(o => o.orderStatus !== 'ยกเลิกการสั่งซื้อ' && o.orderStatus !== 'ยกเลิก');
 
-                          // Extract unique year-month strings from paid orders
+                          // Available Months
                           const availableMonths = Array.from(new Set(
-                            paid
+                            validOrders
                               .filter(o => o.createdAt && typeof o.createdAt === 'string')
                               .map(o => o.createdAt.substring(0, 7))
                           )).sort((a, b) => b.localeCompare(a));
 
-                          const currentMonthStr = getLocalYearMonth();
+                          const currentMonthStr = getLocalYearMonthDynamic();
                           if (!availableMonths.includes(currentMonthStr)) {
                             availableMonths.unshift(currentMonthStr);
                           }
 
-                          // Ensure bestSellerMonth is valid, or fallback to current month
-                          const activeMonth = availableMonths.includes(bestSellerMonth) ? bestSellerMonth : currentMonthStr;
+                          // Available Years
+                          const availableYears = Array.from(new Set(
+                            validOrders
+                              .filter(o => o.createdAt && typeof o.createdAt === 'string')
+                              .map(o => o.createdAt.substring(0, 4))
+                          )).sort((a, b) => b.localeCompare(a));
 
-                          const productSales: { [name: string]: number } = {};
-                          paid
-                            .filter(o => o.createdAt && typeof o.createdAt === 'string' && o.createdAt.substring(0, 7) === activeMonth)
-                            .forEach(o => {
-                              o.items.forEach(item => {
-                                productSales[item.productName] = (productSales[item.productName] || 0) + item.quantity;
-                              });
+                          const currentYearStr = new Date().getFullYear().toString();
+                          if (!availableYears.includes(currentYearStr)) {
+                            availableYears.unshift(currentYearStr);
+                          }
+
+                          // Filter orders based on bestSellerMode
+                          const filteredOrders = validOrders.filter(o => {
+                            if (!o.createdAt || typeof o.createdAt !== 'string') return true;
+                            const d = o.createdAt.substring(0, 10);
+                            const m = o.createdAt.substring(0, 7);
+                            const y = o.createdAt.substring(0, 4);
+
+                            if (bestSellerMode === 'month') {
+                              return m === bestSellerSelectedMonth;
+                            }
+                            if (bestSellerMode === 'year') {
+                              return y === bestSellerSelectedYear;
+                            }
+                            if (bestSellerMode === 'range') {
+                              if (bestSellerStartDate && d < bestSellerStartDate) return false;
+                              if (bestSellerEndDate && d > bestSellerEndDate) return false;
+                              return true;
+                            }
+                            return true; // 'all'
+                          });
+
+                          // Calculate product sales & revenues
+                          const productSales: { [name: string]: { qty: number; rev: number } } = {};
+                          filteredOrders.forEach(o => {
+                            o.items.forEach(item => {
+                              if (!productSales[item.productName]) {
+                                productSales[item.productName] = { qty: 0, rev: 0 };
+                              }
+                              productSales[item.productName].qty += item.quantity;
+                              productSales[item.productName].rev += item.quantity * item.price;
                             });
+                          });
 
                           const list = Object.entries(productSales)
-                            .map(([name, qty]) => {
+                            .map(([name, data]) => {
                               const prod = products.find(p => p.name === name);
-                              const rev = paid
-                                .filter(o => o.createdAt && typeof o.createdAt === 'string' && o.createdAt.substring(0, 7) === activeMonth)
-                                .reduce((sum, o) => {
-                                  const item = o.items.find(i => i.productName === name);
-                                  return sum + (item ? item.quantity * item.price : 0);
-                                }, 0);
-                              return { name, qty, rev, image: prod?.image || '/images/logo.png', unit: prod?.unit || 'กก.' };
+                              return {
+                                name,
+                                qty: data.qty,
+                                rev: data.rev,
+                                image: prod?.image || '/images/logo.png',
+                                unit: prod?.unit || 'กก.'
+                              };
                             })
                             .sort((a, b) => b.qty - a.qty);
 
+                          const formatMonthName = (ymStr: string) => {
+                            const [y, m] = ymStr.split('-');
+                            const date = new Date(parseInt(y), parseInt(m) - 1, 1);
+                            return date.toLocaleDateString('th-TH', { month: 'long', year: 'numeric' });
+                          };
+
                           return (
                             <>
-                              <div className="flex items-center justify-between gap-4 pb-4 border-b border-stone-100">
-                                <h4 className="font-bold text-stone-900 flex items-center gap-2">
-                                  <span>🍇</span> ขายดีประจำเดือน
-                                </h4>
-                                <select
-                                  value={activeMonth}
-                                  onChange={(e) => setBestSellerMonth(e.target.value)}
-                                  className="bg-stone-50 border border-stone-200 rounded-xl px-2.5 py-1 text-xs font-bold text-stone-700 focus:outline-none"
-                                >
-                                  {availableMonths.map(m => {
-                                    const [y, mm] = m.split('-');
-                                    const monthName = new Date(parseInt(y), parseInt(mm) - 1, 1).toLocaleDateString('th-TH', { month: 'long', year: 'numeric' });
-                                    return (
-                                      <option key={m} value={m}>
-                                        {monthName}
-                                      </option>
-                                    );
-                                  })}
-                                </select>
+                              <div className="space-y-3 pb-4 border-b border-stone-100">
+                                <div className="flex items-center justify-between gap-2">
+                                  <h4 className="font-bold text-stone-900 flex items-center gap-2">
+                                    <span>🍇</span> อันดับสินค้าขายดี
+                                  </h4>
+                                </div>
+
+                                {/* Mode Selectors */}
+                                <div className="flex bg-stone-100 p-1 rounded-xl text-xs">
+                                  <button
+                                    onClick={() => setBestSellerMode('month')}
+                                    className={`flex-1 py-1.5 rounded-lg font-bold transition-all cursor-pointer ${bestSellerMode === 'month' ? 'bg-white text-purple-800 shadow-sm' : 'text-stone-500 hover:text-stone-800'}`}
+                                  >
+                                    รายเดือน
+                                  </button>
+                                  <button
+                                    onClick={() => setBestSellerMode('year')}
+                                    className={`flex-1 py-1.5 rounded-lg font-bold transition-all cursor-pointer ${bestSellerMode === 'year' ? 'bg-white text-purple-800 shadow-sm' : 'text-stone-500 hover:text-stone-800'}`}
+                                  >
+                                    รายปี
+                                  </button>
+                                  <button
+                                    onClick={() => setBestSellerMode('range')}
+                                    className={`flex-1 py-1.5 rounded-lg font-bold transition-all cursor-pointer ${bestSellerMode === 'range' ? 'bg-white text-purple-800 shadow-sm' : 'text-stone-500 hover:text-stone-800'}`}
+                                  >
+                                    ช่วงวันที่
+                                  </button>
+                                  <button
+                                    onClick={() => setBestSellerMode('all')}
+                                    className={`flex-1 py-1.5 rounded-lg font-bold transition-all cursor-pointer ${bestSellerMode === 'all' ? 'bg-white text-purple-800 shadow-sm' : 'text-stone-500 hover:text-stone-800'}`}
+                                  >
+                                    ทั้งหมด
+                                  </button>
+                                </div>
+
+                                {/* Controls based on mode */}
+                                {bestSellerMode === 'month' && (
+                                  <div className="flex items-center justify-between pt-1">
+                                    <span className="text-xs font-bold text-stone-500">เลือกเดือน:</span>
+                                    <select
+                                      value={bestSellerSelectedMonth}
+                                      onChange={(e) => setBestSellerSelectedMonth(e.target.value)}
+                                      className="bg-stone-50 border border-stone-200 rounded-xl px-2.5 py-1 text-xs font-bold text-stone-800 focus:outline-none cursor-pointer"
+                                    >
+                                      {availableMonths.map(m => (
+                                        <option key={m} value={m}>
+                                          {formatMonthName(m)}
+                                        </option>
+                                      ))}
+                                    </select>
+                                  </div>
+                                )}
+
+                                {bestSellerMode === 'year' && (
+                                  <div className="flex items-center justify-between pt-1">
+                                    <span className="text-xs font-bold text-stone-500">เลือกปี:</span>
+                                    <select
+                                      value={bestSellerSelectedYear}
+                                      onChange={(e) => setBestSellerSelectedYear(e.target.value)}
+                                      className="bg-stone-50 border border-stone-200 rounded-xl px-2.5 py-1 text-xs font-bold text-stone-800 focus:outline-none cursor-pointer"
+                                    >
+                                      {availableYears.map(y => (
+                                        <option key={y} value={y}>
+                                          ปี พ.ศ. {parseInt(y) + 543} ({y})
+                                        </option>
+                                      ))}
+                                    </select>
+                                  </div>
+                                )}
+
+                                {bestSellerMode === 'range' && (
+                                  <div className="flex flex-col gap-2 pt-1 text-xs font-bold text-stone-600">
+                                    <div className="flex items-center justify-between gap-2">
+                                      <span>เริ่ม:</span>
+                                      <input
+                                        type="date"
+                                        value={bestSellerStartDate}
+                                        onChange={(e) => setBestSellerStartDate(e.target.value)}
+                                        className="bg-stone-50 border border-stone-200 rounded-xl px-2 py-1 text-xs text-stone-800 focus:outline-none"
+                                      />
+                                    </div>
+                                    <div className="flex items-center justify-between gap-2">
+                                      <span>ถึง:</span>
+                                      <input
+                                        type="date"
+                                        value={bestSellerEndDate}
+                                        onChange={(e) => setBestSellerEndDate(e.target.value)}
+                                        className="bg-stone-50 border border-stone-200 rounded-xl px-2 py-1 text-xs text-stone-800 focus:outline-none"
+                                      />
+                                    </div>
+                                  </div>
+                                )}
                               </div>
 
-                              <div className="space-y-4 pt-4">
+                              <div className="space-y-4 pt-2">
                                 {list.length === 0 ? (
-                                  <p className="text-center text-xs text-stone-400 py-10 font-medium">ยังไม่มีข้อมูลออเดอร์ในเดือนนี้</p>
+                                  <p className="text-center text-xs text-stone-400 py-8 font-medium">ไม่พบข้อมูลสินค้าขายดีในช่วงเวลาที่เลือกครับ</p>
                                 ) : (
                                   <div className="space-y-3">
                                     {list.map((item: any, idx: number) => (
@@ -997,8 +1458,7 @@ export default function AdminPanel() {
                             <th className="p-4">รหัสออเดอร์</th>
                             <th className="p-4">ลูกค้า</th>
                             <th className="p-4">ยอดรวม</th>
-                            <th className="p-4">สถานะชำระเงิน</th>
-                            <th className="p-4">สถานะจัดส่ง</th>
+                            <th className="p-4">สถานะคำสั่งซื้อ</th>
                             <th className="p-4">จัดการ</th>
                           </tr>
                         </thead>
@@ -1012,44 +1472,101 @@ export default function AdminPanel() {
                               </td>
                               <td className="p-4 font-bold text-stone-900">{order.totalPrice} บาท</td>
                               <td className="p-4">
-                                <select
-                                  value={order.paymentStatus}
-                                  onChange={(e) => {
-                                    const nextStatus = e.target.value as Order['paymentStatus'];
-                                    setOrders(orders.map(o => o.id === order.id ? { ...o, paymentStatus: nextStatus } : o));
-                                    handleUpdateOrderStatus(order.id, { paymentStatus: nextStatus });
-                                  }}
-                                  className={`text-xs font-bold rounded-full px-2.5 py-1.5 border focus:outline-none cursor-pointer ${order.paymentStatus === 'ชำระเงินแล้ว' ? 'bg-emerald-50 text-emerald-700 border-emerald-200' :
-                                    order.paymentStatus === 'รอตรวจสอบ' ? 'bg-amber-50 text-amber-700 border-amber-200 animate-pulse' :
-                                      order.paymentStatus === 'คืนเงินสำเร็จ' ? 'bg-purple-50 text-purple-700 border-purple-200' :
-                                        'bg-red-50 text-red-700 border-red-200'
+                                <div className="flex flex-col items-start gap-1">
+                                  <select
+                                    value={order.orderStatus}
+                                    onChange={async (e) => {
+                                      const nextStatus = e.target.value;
+                                      setOrders(orders.map(o => o.id === order.id ? { ...o, orderStatus: nextStatus } : o));
+                                      await handleUpdateOrderStatus(order.id, { orderStatus: nextStatus });
+                                    }}
+                                    className={`text-xs font-bold rounded-full px-3 py-1.5 border focus:outline-none cursor-pointer shadow-sm transition-all ${
+                                      order.orderStatus === 'จัดส่งแล้ว' || order.orderStatus === 'ส่งสำเร็จ' ? 'bg-emerald-50 text-emerald-700 border-emerald-200' :
+                                      order.orderStatus === 'กำลังจัดส่งไปให้ทางขนส่ง' || order.orderStatus === 'กำลังจัดส่ง' ? 'bg-purple-50 text-purple-700 border-purple-200' :
+                                      order.orderStatus === 'รอดำเนินการ' ? 'bg-blue-50 text-blue-700 border-blue-200' :
+                                      order.orderStatus === 'รอการตรวจสอบ' || order.orderStatus === 'รอตรวจสอบ' ? 'bg-amber-50 text-amber-700 border-amber-200 animate-pulse' :
+                                      'bg-red-50 text-red-700 border-red-200'
                                     }`}
-                                >
-                                  <option value="รอตรวจสอบ">⏳ รอตรวจสอบ</option>
-                                  <option value="ชำระเงินแล้ว">✅ ชำระเงินแล้ว</option>
-                                  <option value="คืนเงินสำเร็จ">💸 คืนเงินสำเร็จ</option>
-                                  <option value="ล้มเหลว">❌ ล้มเหลว</option>
-                                </select>
-                              </td>
-                              <td className="p-4">
-                                <select
-                                  value={order.orderStatus}
-                                  onChange={(e) => {
-                                    const nextStatus = e.target.value as Order['orderStatus'];
-                                    setOrders(orders.map(o => o.id === order.id ? { ...o, orderStatus: nextStatus } : o));
-                                    handleUpdateOrderStatus(order.id, { orderStatus: nextStatus });
-                                  }}
-                                  className={`text-xs font-bold rounded-full px-2.5 py-1.5 border focus:outline-none cursor-pointer ${order.orderStatus === 'ส่งสำเร็จ' ? 'bg-emerald-50 text-emerald-700 border-emerald-200' :
-                                    order.orderStatus === 'กำลังจัดส่ง' ? 'bg-blue-50 text-blue-700 border-blue-200' :
-                                      order.orderStatus === 'รอดำเนินการ' ? 'bg-stone-100 text-stone-600 border-stone-200' :
-                                        'bg-red-50 text-red-700 border-red-200'
-                                    }`}
-                                >
-                                  <option value="รอดำเนินการ">📦 รอดำเนินการ</option>
-                                  <option value="กำลังจัดส่ง">🚚 กำลังจัดส่ง</option>
-                                  <option value="ส่งสำเร็จ">🏁 ส่งสำเร็จ</option>
-                                  <option value="ยกเลิก">❌ ยกเลิก</option>
-                                </select>
+                                  >
+                                    <option value="รอการตรวจสอบ">⏳ รอการตรวจสอบ</option>
+                                    <option value="รอดำเนินการ">📦 รอดำเนินการ</option>
+                                    <option value="กำลังจัดส่งไปให้ทางขนส่ง">🚚 กำลังจัดส่งไปให้ทางขนส่ง</option>
+                                    <option value="จัดส่งแล้ว">✅ จัดส่งแล้ว</option>
+                                    <option value="ยกเลิกการสั่งซื้อ">❌ ยกเลิกการสั่งซื้อ</option>
+                                  </select>
+
+                                  {/* Delivery image upload button for admin when status is 'จัดส่งแล้ว' */}
+                                  {(order.orderStatus === 'จัดส่งแล้ว' || order.orderStatus === 'ส่งสำเร็จ' || order.trackingImageUrl) && (
+                                    <div className="flex items-center gap-2 mt-1">
+                                      <label className="text-[11px] font-bold text-emerald-700 hover:text-emerald-800 bg-emerald-50 hover:bg-emerald-100 px-2.5 py-1 rounded-lg border border-emerald-200 cursor-pointer flex items-center gap-1 transition-all">
+                                        📷 {order.trackingImageUrl ? 'แก้ไขรูปภาพจัดส่ง' : 'แนบรูปภาพจัดส่งให้ลูกค้า'}
+                                        <input
+                                          type="file"
+                                          accept="image/*"
+                                          onChange={async (e) => {
+                                            const file = e.target.files?.[0];
+                                            if (!file) return;
+                                            try {
+                                              const formData = new FormData();
+                                              formData.append('file', file);
+                                              const { url } = await uploadFile(formData);
+                                              await handleUpdateOrderStatus(order.id, { orderStatus: 'จัดส่งแล้ว', trackingImageUrl: url });
+                                              setOrders(orders.map(o => o.id === order.id ? { ...o, orderStatus: 'จัดส่งแล้ว', trackingImageUrl: url } : o));
+                                              alert(`อัปโหลดรูปภาพหลักฐานการจัดส่งเรียบร้อยแล้วสำหรับออเดอร์ #${order.id}!`);
+                                            } catch (err) {
+                                              alert('เกิดข้อผิดพลาดในการอัปโหลดรูปภาพจัดส่ง');
+                                            }
+                                          }}
+                                          className="hidden"
+                                        />
+                                      </label>
+                                      {order.trackingImageUrl && (
+                                        <button
+                                          onClick={() => setViewingSlipUrl(order.trackingImageUrl || null)}
+                                          className="text-[11px] font-bold text-purple-700 bg-purple-50 hover:bg-purple-100 px-2.5 py-1 rounded-lg border border-purple-200 transition-all flex items-center gap-1 cursor-pointer"
+                                        >
+                                          🖼️ ดูรูปจัดส่ง
+                                        </button>
+                                      )}
+                                    </div>
+                                  )}
+
+                                  {/* Refund slip upload button for admin when status is 'ยกเลิกการสั่งซื้อ' */}
+                                  {(order.orderStatus === 'ยกเลิกการสั่งซื้อ' || order.orderStatus === 'ยกเลิก' || order.refundSlipUrl) && (
+                                    <div className="flex items-center gap-2 mt-1">
+                                      <label className="text-[11px] font-bold text-rose-700 hover:text-rose-800 bg-rose-50 hover:bg-rose-100 px-2.5 py-1 rounded-lg border border-rose-200 cursor-pointer flex items-center gap-1 transition-all">
+                                        📷 {order.refundSlipUrl ? 'แก้ไขสลิปคืนเงิน' : 'แนบรูปภาพสลิปคืนเงินให้ลูกค้า'}
+                                        <input
+                                          type="file"
+                                          accept="image/*"
+                                          onChange={async (e) => {
+                                            const file = e.target.files?.[0];
+                                            if (!file) return;
+                                            try {
+                                              const formData = new FormData();
+                                              formData.append('file', file);
+                                              const { url } = await uploadFile(formData);
+                                              await handleUpdateOrderStatus(order.id, { orderStatus: 'ยกเลิกการสั่งซื้อ', refundSlipUrl: url });
+                                              setOrders(orders.map(o => o.id === order.id ? { ...o, orderStatus: 'ยกเลิกการสั่งซื้อ', refundSlipUrl: url } : o));
+                                              alert(`อัปโหลดรูปภาพสลิปโอนเงินคืนเรียบร้อยแล้วสำหรับออเดอร์ #${order.id}!`);
+                                            } catch (err) {
+                                              alert('เกิดข้อผิดพลาดในการอัปโหลดสลิปคืนเงิน');
+                                            }
+                                          }}
+                                          className="hidden"
+                                        />
+                                      </label>
+                                      {order.refundSlipUrl && (
+                                        <button
+                                          onClick={() => setViewingSlipUrl(order.refundSlipUrl || null)}
+                                          className="text-[11px] font-bold text-purple-700 bg-purple-50 hover:bg-purple-100 px-2.5 py-1 rounded-lg border border-purple-200 transition-all flex items-center gap-1 cursor-pointer"
+                                        >
+                                          💸 ดูสลิปคืนเงิน
+                                        </button>
+                                      )}
+                                    </div>
+                                  )}
+                                </div>
                               </td>
                               <td className="p-4">
                                 <div className="flex flex-col gap-1.5 items-start">
@@ -1059,28 +1576,6 @@ export default function AdminPanel() {
                                   >
                                     ดูรายละเอียด
                                   </button>
-                                  <label className="text-[11px] font-bold text-purple-700 hover:text-purple-800 underline flex items-center gap-1 cursor-pointer">
-                                    📷 {order.refundSlipUrl ? 'สลิปคืนเงิน' : 'แนบสลิปคืนเงิน'}
-                                    <input
-                                      type="file"
-                                      accept="image/*"
-                                      onChange={async (e) => {
-                                        const file = e.target.files?.[0];
-                                        if (!file) return;
-                                        try {
-                                          const formData = new FormData();
-                                          formData.append('file', file);
-                                          const { url } = await uploadFile(formData);
-                                          await handleUpdateOrderStatus(order.id, { paymentStatus: 'คืนเงินสำเร็จ', refundSlipUrl: url });
-                                          setOrders(orders.map(o => o.id === order.id ? { ...o, paymentStatus: 'คืนเงินสำเร็จ', refundSlipUrl: url } : o));
-                                          alert(`อัปโหลดสลิปโอนเงินคืนเรียบร้อยแล้วสำหรับออเดอร์ #${order.id}!`);
-                                        } catch (err) {
-                                          alert('เกิดข้อผิดพลาดในการอัปโหลดสลิปคืนเงิน');
-                                        }
-                                      }}
-                                      className="hidden"
-                                    />
-                                  </label>
                                 </div>
                               </td>
                             </tr>
@@ -1234,15 +1729,15 @@ export default function AdminPanel() {
                       <div className="p-5 rounded-2xl bg-emerald-50 border border-emerald-100">
                         <p className="text-xs font-bold text-emerald-800 uppercase tracking-wide">ยอดขายที่ยืนยันแล้ว</p>
                         <p className="text-2xl font-extrabold text-emerald-900 mt-1">
-                          {orders.filter(o => o.paymentStatus === 'ชำระเงินแล้ว').reduce((sum, o) => sum + o.totalPrice, 0)} บาท
+                          {orders.filter(o => o.orderStatus === 'รอดำเนินการ' || o.orderStatus === 'กำลังจัดส่งไปให้ทางขนส่ง' || o.orderStatus === 'จัดส่งแล้ว' || o.orderStatus === 'ส่งสำเร็จ').reduce((sum, o) => sum + o.totalPrice, 0)} บาท
                         </p>
-                        <p className="text-[10px] text-emerald-600 mt-0.5">จากคำสั่งซื้อที่ได้รับการชำระเงินแล้ว</p>
+                        <p className="text-[10px] text-emerald-600 mt-0.5">จากคำสั่งซื้อที่ได้รับการชำระเงินและอนุมัติแล้ว</p>
                       </div>
 
                       <div className="p-5 rounded-2xl bg-amber-50 border border-amber-100">
                         <p className="text-xs font-bold text-amber-800 uppercase tracking-wide">ยอดขายรออนุมัติ</p>
                         <p className="text-2xl font-extrabold text-amber-900 mt-1">
-                          {orders.filter(o => o.paymentStatus === 'รอตรวจสอบ').reduce((sum, o) => sum + o.totalPrice, 0)} บาท
+                          {orders.filter(o => o.orderStatus === 'รอการตรวจสอบ').reduce((sum, o) => sum + o.totalPrice, 0)} บาท
                         </p>
                         <p className="text-[10px] text-amber-600 mt-0.5">อยู่ระหว่างรอการอนุมัติสลิปโอนเงิน</p>
                       </div>
@@ -1259,7 +1754,7 @@ export default function AdminPanel() {
                       <h4 className="font-bold text-stone-900 flex items-center gap-2">
                         <span>⏳</span> ตรวจสอบการโอนเงินที่รอการอนุมัติ
                       </h4>
-                      {orders.filter(o => o.paymentStatus === 'รอตรวจสอบ').length === 0 ? (
+                      {orders.filter(o => o.orderStatus === 'รอการตรวจสอบ').length === 0 ? (
                         <div className="p-6 text-center border border-dashed border-stone-200 rounded-2xl text-stone-500 font-medium">
                           ไม่มีออเดอร์ที่ค้างตรวจสอบยอดชำระเงิน
                         </div>
@@ -1277,7 +1772,7 @@ export default function AdminPanel() {
                               </tr>
                             </thead>
                             <tbody className="divide-y divide-stone-100 font-medium text-stone-700">
-                              {orders.filter(o => o.paymentStatus === 'รอตรวจสอบ').map((order) => (
+                              {orders.filter(o => o.orderStatus === 'รอการตรวจสอบ').map((order) => (
                                 <tr key={order.id} className="hover:bg-stone-50/50">
                                   <td className="p-4 font-bold text-purple-700">{order.id}</td>
                                   <td className="p-4 text-stone-900 font-bold">{order.username}</td>
@@ -1300,8 +1795,8 @@ export default function AdminPanel() {
                                     <div className="flex items-center gap-2">
                                       <button
                                         onClick={() => {
-                                          setOrders(orders.map(o => o.id === order.id ? { ...o, paymentStatus: 'ชำระเงินแล้ว', orderStatus: 'กำลังจัดส่ง' } : o));
-                                          handleUpdateOrderStatus(order.id, { paymentStatus: 'ชำระเงินแล้ว', orderStatus: 'กำลังจัดส่ง' });
+                                          setOrders(orders.map(o => o.id === order.id ? { ...o, orderStatus: 'รอดำเนินการ' } : o));
+                                          handleUpdateOrderStatus(order.id, { orderStatus: 'รอดำเนินการ' });
                                         }}
                                         className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold px-3 py-1.5 rounded-xl text-xs shadow-sm transition-all"
                                       >
@@ -1309,8 +1804,8 @@ export default function AdminPanel() {
                                       </button>
                                       <button
                                         onClick={() => {
-                                          setOrders(orders.map(o => o.id === order.id ? { ...o, paymentStatus: 'ล้มเหลว', orderStatus: 'ยกเลิก' } : o));
-                                          handleUpdateOrderStatus(order.id, { paymentStatus: 'ล้มเหลว', orderStatus: 'ยกเลิก' });
+                                          setOrders(orders.map(o => o.id === order.id ? { ...o, orderStatus: 'ยกเลิกการสั่งซื้อ' } : o));
+                                          handleUpdateOrderStatus(order.id, { orderStatus: 'ยกเลิกการสั่งซื้อ' });
                                         }}
                                         className="bg-red-50 text-red-600 hover:bg-red-100 hover:text-red-700 font-bold px-3 py-1.5 rounded-xl text-xs transition-all border border-red-200"
                                       >
@@ -1640,13 +2135,29 @@ export default function AdminPanel() {
 
                 <form onSubmit={async (e) => {
                   e.preventDefault();
-                  if (editingProduct) {
-                    await updateProduct(editingProduct.id, productForm);
-                  } else {
-                    await createProduct(productForm);
+                  // Check duplicate product name
+                  const targetName = productForm.name.trim().toLowerCase();
+                  const isDuplicate = products.some(p => p.name.trim().toLowerCase() === targetName && (!editingProduct || p.id !== editingProduct.id));
+                  if (isDuplicate) {
+                    alert(`⚠️ มีสินค้าชื่อ "${productForm.name}" อยู่ในระบบแล้วครับ กรุณาใช้ชื่ออื่น`);
+                    return;
                   }
-                  await loadData();
-                  setIsProductModalOpen(false);
+
+                  setIsSavingProduct(true);
+                  try {
+                    if (editingProduct) {
+                      await updateProduct(editingProduct.id, productForm);
+                    } else {
+                      await createProduct(productForm);
+                    }
+                    setIsProductModalOpen(false);
+                    loadData(false);
+                  } catch (err: any) {
+                    console.error('Error saving product:', err);
+                    alert(err.message || 'เกิดข้อผิดพลาดในการบันทึกข้อมูลสินค้าครับ');
+                  } finally {
+                    setIsSavingProduct(false);
+                  }
                 }} className="space-y-4">
                   <div>
                     <label className="block text-xs font-bold text-stone-500 uppercase mb-1">ชื่อสินค้า</label>
@@ -1689,7 +2200,7 @@ export default function AdminPanel() {
                       <input
                         type="number"
                         min="0"
-                        placeholder="ไม่ใส่ก็ได้"
+                        placeholder="ไม่บังคับ"
                         value={productForm.originalPrice || ''}
                         onChange={(e) => setProductForm({ ...productForm, originalPrice: Number(e.target.value) })}
                         className="w-full bg-stone-50 border border-stone-200 rounded-xl px-4 py-2 text-sm focus:outline-none focus:border-purple-600 font-bold"
@@ -1751,16 +2262,25 @@ export default function AdminPanel() {
                   <div className="pt-4 flex gap-3">
                     <button
                       type="button"
+                      disabled={isSavingProduct}
                       onClick={() => setIsProductModalOpen(false)}
-                      className="w-1/2 border border-stone-300 hover:bg-stone-50 text-stone-750 font-bold py-3 rounded-full text-sm transition-all"
+                      className="w-1/2 border border-stone-300 hover:bg-stone-50 text-stone-750 font-bold py-3 rounded-full text-sm transition-all disabled:opacity-50"
                     >
                       ยกเลิก
                     </button>
                     <button
                       type="submit"
-                      className="w-1/2 bg-[#7e22ce] hover:bg-[#6b21a8] text-white font-bold py-3 rounded-full text-sm transition-all shadow-md"
+                      disabled={isSavingProduct}
+                      className="w-1/2 bg-[#7e22ce] hover:bg-[#6b21a8] text-white font-bold py-3 rounded-full text-sm transition-all shadow-md flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
                     >
-                      {editingProduct ? 'บันทึกการแก้ไข' : 'เพิ่มสินค้า'}
+                      {isSavingProduct ? (
+                        <>
+                          <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+                          <span>กำลังบันทึก...</span>
+                        </>
+                      ) : (
+                        editingProduct ? 'บันทึกการแก้ไข' : 'เพิ่มสินค้า'
+                      )}
                     </button>
                   </div>
                 </form>
@@ -1783,13 +2303,29 @@ export default function AdminPanel() {
 
                 <form onSubmit={async (e) => {
                   e.preventDefault();
-                  if (editingCategory) {
-                    await updateCategory(editingCategory.id, categoryForm);
-                  } else {
-                    await createCategory(categoryForm);
+                  // Check duplicate category name
+                  const targetName = categoryForm.name.trim().toLowerCase();
+                  const isDuplicate = categories.some(c => c.name.trim().toLowerCase() === targetName && (!editingCategory || c.id !== editingCategory.id));
+                  if (isDuplicate) {
+                    alert(`⚠️ มีประเภทสินค้าชื่อ "${categoryForm.name}" อยู่ในระบบแล้วครับ กรุณาใช้ชื่ออื่น`);
+                    return;
                   }
-                  await loadData();
-                  setIsCategoryModalOpen(false);
+
+                  setIsSavingCategory(true);
+                  try {
+                    if (editingCategory) {
+                      await updateCategory(editingCategory.id, categoryForm);
+                    } else {
+                      await createCategory(categoryForm);
+                    }
+                    setIsCategoryModalOpen(false);
+                    loadData(false);
+                  } catch (err: any) {
+                    console.error('Error saving category:', err);
+                    alert(err.message || 'เกิดข้อผิดพลาดในการบันทึกประเภทสินค้าครับ');
+                  } finally {
+                    setIsSavingCategory(false);
+                  }
                 }} className="space-y-4">
                   <div>
                     <label className="block text-xs font-bold text-stone-500 uppercase mb-1">ชื่อประเภทสินค้า</label>
@@ -1833,16 +2369,25 @@ export default function AdminPanel() {
                   <div className="pt-4 flex gap-3">
                     <button
                       type="button"
+                      disabled={isSavingCategory}
                       onClick={() => setIsCategoryModalOpen(false)}
-                      className="w-1/2 border border-stone-300 hover:bg-stone-50 text-stone-750 font-bold py-3 rounded-full text-sm transition-all"
+                      className="w-1/2 border border-stone-300 hover:bg-stone-50 text-stone-750 font-bold py-3 rounded-full text-sm transition-all disabled:opacity-50"
                     >
                       ยกเลิก
                     </button>
                     <button
                       type="submit"
-                      className="w-1/2 bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-3 rounded-full text-sm transition-all shadow-md"
+                      disabled={isSavingCategory}
+                      className="w-1/2 bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-3 rounded-full text-sm transition-all shadow-md flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
                     >
-                      {editingCategory ? 'บันทึกการแก้ไข' : 'เพิ่มประเภทสินค้า'}
+                      {isSavingCategory ? (
+                        <>
+                          <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+                          <span>กำลังบันทึก...</span>
+                        </>
+                      ) : (
+                        editingCategory ? 'บันทึกการแก้ไข' : 'เพิ่มประเภทสินค้า'
+                      )}
                     </button>
                   </div>
                 </form>
@@ -1955,8 +2500,8 @@ export default function AdminPanel() {
                     ) : (
                       <div className="pt-2.5 border-t border-stone-150 flex items-center justify-between">
                         <span className="text-[11px] text-stone-500 font-bold">แนบสลิปโอนเงินคืน (แอดมิน):</span>
-                        <label className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-purple-50 hover:bg-purple-100 text-purple-700 font-bold text-xs rounded-xl border border-purple-200 cursor-pointer transition-colors">
-                          <span>📷</span> แนบสลิปโอนเงินคืน
+                        <label className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-rose-50 hover:bg-rose-100 text-rose-700 font-bold text-xs rounded-xl border border-rose-200 cursor-pointer transition-colors">
+                          <span>📷</span> แนบรูปภาพสลิปคืนเงินให้ลูกค้า
                           <input
                             type="file"
                             accept="image/*"
@@ -1967,10 +2512,10 @@ export default function AdminPanel() {
                                 const formData = new FormData();
                                 formData.append('file', file);
                                 const { url } = await uploadFile(formData);
-                                await handleUpdateOrderStatus(selectedOrder.id, { paymentStatus: 'คืนเงินสำเร็จ', refundSlipUrl: url });
-                                setOrders(prev => prev.map(o => o.id === selectedOrder.id ? { ...o, paymentStatus: 'คืนเงินสำเร็จ', refundSlipUrl: url } : o));
-                                setSelectedOrder({ ...selectedOrder, paymentStatus: 'คืนเงินสำเร็จ', refundSlipUrl: url });
-                                alert('อัปโหลดสลิปโอนเงินคืนและเปลี่ยนสถานะเป็น "คืนเงินสำเร็จ" เรียบร้อยแล้ว!');
+                                await handleUpdateOrderStatus(selectedOrder.id, { orderStatus: 'ยกเลิกการสั่งซื้อ', refundSlipUrl: url });
+                                setOrders(prev => prev.map(o => o.id === selectedOrder.id ? { ...o, orderStatus: 'ยกเลิกการสั่งซื้อ', refundSlipUrl: url } : o));
+                                setSelectedOrder({ ...selectedOrder, orderStatus: 'ยกเลิกการสั่งซื้อ', refundSlipUrl: url });
+                                alert('อัปโหลดสลิปโอนเงินคืนและอัปเดตสถานะเรียบร้อยแล้ว!');
                               } catch (err) {
                                 alert('เกิดข้อผิดพลาดในการอัปโหลดสลิปคืนเงิน');
                               }
