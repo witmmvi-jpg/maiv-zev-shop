@@ -12,10 +12,18 @@ import { uploadFile, getChats, sendMessage, markChatRead, sendEmail } from '@/ap
 import LoginModal from '@/components/modals/LoginModal';
 import RichTextEditor from '@/components/admin/RichTextEditor';
 import { compressImage } from '@/lib/imageCompressor';
+import SalesBarChart from '@/components/admin/SalesBarChart';
+import ConfirmModal, { ConfirmModalState } from '@/components/modals/ConfirmModal';
 
 export default function AdminPanel() {
   const { currentUser, isLoaded } = useAuth();
   const [isLoginModalOpen, setIsLoginModalOpen] = useState(false);
+  const [confirmModal, setConfirmModal] = useState<ConfirmModalState>({ isOpen: false, message: '' });
+  const [isSendingEmail, setIsSendingEmail] = useState(false);
+  const [isProductRefreshing, setIsProductRefreshing] = useState(false);
+
+
+
   
   const [adminTab, setAdminTab] = useState<'dashboard' | 'products' | 'categories' | 'orders' | 'members' | 'payments' | 'chats' | 'emails'>('dashboard');
   
@@ -726,6 +734,9 @@ export default function AdminPanel() {
                       );
                     })()}
 
+                    {/* Sales Bar Chart */}
+                    <SalesBarChart orders={orders} />
+
                     {/* Breakdown Graphs and Best Sellers */}
                     <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
                       {/* Left: Sales breakdown */}
@@ -1250,6 +1261,13 @@ export default function AdminPanel() {
                         </button>
                       </div>
 
+                      {isProductRefreshing && (
+                        <div className="flex items-center gap-2.5 bg-purple-50 text-purple-800 text-xs font-bold px-4 py-2.5 rounded-2xl border border-purple-200 shadow-sm animate-pulse">
+                          <div className="w-4 h-4 border-2 border-purple-600 border-t-transparent rounded-full animate-spin" />
+                          <span>🔄 กำลังอัปเดตและซิงค์รายการสินค้าล่าสุดจากฐานข้อมูล...</span>
+                        </div>
+                      )}
+
                       <div className="overflow-x-auto rounded-2xl border border-stone-100">
                         <table className="w-full text-left border-collapse text-sm">
                           <thead>
@@ -1334,11 +1352,19 @@ export default function AdminPanel() {
                                       </button>
                                       <button
                                         onClick={() => {
-                                          if (confirm(`คุณแน่ใจว่าต้องการลบ ${product.name} ใช่หรือไม่?`)) {
-                                            handleDeleteProduct(product.id);
-                                          }
+                                          setConfirmModal({
+                                            isOpen: true,
+                                            title: 'ยืนยันการลบสินค้า',
+                                            message: `คุณแน่ใจว่าต้องการลบ ${product.name} ใช่หรือไม่?`,
+                                            confirmText: 'ยืนยันลบสินค้า',
+                                            cancelText: 'ยกเลิก',
+                                            type: 'delete',
+                                            onConfirm: async () => {
+                                              await handleDeleteProduct(product.id);
+                                            }
+                                          });
                                         }}
-                                        className="bg-stone-100 hover:bg-red-50 hover:text-red-700 p-2 rounded-xl text-stone-600 transition-colors"
+                                        className="bg-stone-100 hover:bg-red-50 hover:text-red-700 p-2 rounded-xl text-stone-600 transition-colors cursor-pointer"
                                         title="ลบสินค้า"
                                       >
                                         🗑️
@@ -2050,20 +2076,51 @@ export default function AdminPanel() {
                         const { to, subject, html } = emailForm;
                         
                         if (!to || !subject || !html) {
-                          alert('กรุณากรอกข้อมูลให้ครบถ้วน');
+                          setConfirmModal({
+                            isOpen: true,
+                            title: 'กรอกข้อมูลไม่ครบถ้วน',
+                            message: 'กรุณากรอกข้อมูลอีเมลผู้รับ หัวข้อ และเนื้อหาอีเมลให้ครบถ้วนก่อนส่งครับ',
+                            confirmText: 'เข้าใจแล้ว',
+                            cancelText: null,
+                            type: 'warning',
+                          });
                           return;
                         }
                         
+                        setIsSendingEmail(true);
                         try {
                           const res = await sendEmail({ to, subject, html, text: html.replace(/<[^>]+>/g, '') });
                           if (res.success) {
-                            alert('ส่งอีเมลสำเร็จแล้ว!');
+                            setConfirmModal({
+                              isOpen: true,
+                              title: 'ส่งอีเมลสำเร็จแล้ว!',
+                              message: `ส่งอีเมลแจ้งเตือนไปยัง ${to} เรียบร้อยแล้วครับ`,
+                              confirmText: 'ตกลง',
+                              cancelText: null,
+                              type: 'success',
+                            });
                             setEmailForm({ to: '', subject: '', html: '' });
                           } else {
-                            alert('เกิดข้อผิดพลาดในการส่งอีเมล: ' + res.error);
+                            setConfirmModal({
+                              isOpen: true,
+                              title: 'ส่งอีเมลไม่สำเร็จ',
+                              message: 'เกิดข้อผิดพลาดในการส่งอีเมล: ' + (res.error || 'โปรดตรวจสอบการตั้งค่า SMTP'),
+                              confirmText: 'ปิด',
+                              cancelText: null,
+                              type: 'warning',
+                            });
                           }
                         } catch (err: any) {
-                          alert('เกิดข้อผิดพลาด: ' + err.message);
+                          setConfirmModal({
+                            isOpen: true,
+                            title: 'เกิดข้อผิดพลาด',
+                            message: 'เกิดข้อผิดพลาด: ' + err.message,
+                            confirmText: 'ปิด',
+                            cancelText: null,
+                            type: 'warning',
+                          });
+                        } finally {
+                          setIsSendingEmail(false);
                         }
                       }}
                       className="bg-white rounded-3xl p-6 md:p-8 border border-stone-200/60 shadow-sm space-y-5"
@@ -2076,7 +2133,7 @@ export default function AdminPanel() {
                             key={i}
                             type="button"
                             onClick={() => setEmailForm({ ...emailForm, subject: tpl.subject, html: tpl.html })}
-                            className="bg-stone-50 hover:bg-purple-50 text-stone-700 hover:text-purple-700 font-bold text-[11px] px-3 py-1.5 rounded-lg border border-stone-200 hover:border-purple-200 transition-colors"
+                            className="bg-stone-50 hover:bg-purple-50 text-stone-700 hover:text-purple-700 font-bold text-[11px] px-3 py-1.5 rounded-lg border border-stone-200 hover:border-purple-200 transition-colors cursor-pointer"
                           >
                             {tpl.name}
                           </button>
@@ -2084,7 +2141,7 @@ export default function AdminPanel() {
                         <button
                           type="button"
                           onClick={() => setEmailForm({ ...emailForm, subject: '', html: '' })}
-                          className="bg-stone-50 hover:bg-stone-200 text-stone-500 font-bold text-[11px] px-3 py-1.5 rounded-lg border border-stone-200 transition-colors ml-auto"
+                          className="bg-stone-50 hover:bg-stone-200 text-stone-500 font-bold text-[11px] px-3 py-1.5 rounded-lg border border-stone-200 transition-colors ml-auto cursor-pointer"
                         >
                           ล้างค่า (Clear)
                         </button>
@@ -2107,8 +2164,22 @@ export default function AdminPanel() {
                         />
                       </div>
                       <div className="pt-4 border-t border-stone-100 flex justify-end">
-                        <button type="submit" className="bg-purple-600 hover:bg-purple-700 text-white font-extrabold px-8 py-3.5 rounded-2xl text-sm transition-all cursor-pointer shadow-md hover:shadow-lg flex items-center gap-2">
-                          <span>📧</span> ยืนยันส่งอีเมล
+                        <button
+                          type="submit"
+                          disabled={isSendingEmail}
+                          className="bg-purple-600 hover:bg-purple-700 text-white font-extrabold px-8 py-3.5 rounded-2xl text-sm transition-all cursor-pointer shadow-md hover:shadow-lg flex items-center justify-center gap-2.5 disabled:opacity-75 disabled:cursor-not-allowed"
+                        >
+                          {isSendingEmail ? (
+                            <>
+                              <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                              <span>กำลังส่งอีเมล...</span>
+                            </>
+                          ) : (
+                            <>
+                              <span>📧</span>
+                              <span>ยืนยันส่งอีเมล</span>
+                            </>
+                          )}
                         </button>
                       </div>
                     </form>
@@ -2139,24 +2210,55 @@ export default function AdminPanel() {
                   const targetName = productForm.name.trim().toLowerCase();
                   const isDuplicate = products.some(p => p.name.trim().toLowerCase() === targetName && (!editingProduct || p.id !== editingProduct.id));
                   if (isDuplicate) {
-                    alert(`⚠️ มีสินค้าชื่อ "${productForm.name}" อยู่ในระบบแล้วครับ กรุณาใช้ชื่ออื่น`);
+                    setConfirmModal({
+                      isOpen: true,
+                      title: 'ชื่อสินค้าซ้ำในระบบ',
+                      message: `มีสินค้าชื่อ "${productForm.name}" อยู่ในระบบแล้วครับ กรุณาใช้ชื่ออื่น`,
+                      confirmText: 'เข้าใจแล้ว',
+                      cancelText: null,
+                      type: 'warning',
+                    });
                     return;
                   }
 
                   setIsSavingProduct(true);
+                  setIsProductRefreshing(true);
                   try {
                     if (editingProduct) {
                       await updateProduct(editingProduct.id, productForm);
+                      setProducts(prev => prev.map(p => p.id === editingProduct.id ? { ...p, ...productForm } : p));
                     } else {
                       await createProduct(productForm);
+                      const tempProduct = {
+                        id: Date.now(),
+                        name: productForm.name,
+                        price: Number(productForm.price || 0),
+                        originalPrice: Number(productForm.originalPrice || 0),
+                        promotionText: productForm.promotionText || '',
+                        unit: productForm.unit || 'กก.',
+                        image: productForm.image || '/images/black_grapes.png',
+                        category: productForm.category || 'ผลไม้สด',
+                        stock: Number(productForm.stock || 0),
+                        benefits: productForm.benefits || ''
+                      };
+                      setProducts(prev => [tempProduct, ...prev]);
                     }
+                    await new Promise(res => setTimeout(res, 200));
                     setIsProductModalOpen(false);
-                    loadData(false);
+                    await loadData(false);
                   } catch (err: any) {
                     console.error('Error saving product:', err);
-                    alert(err.message || 'เกิดข้อผิดพลาดในการบันทึกข้อมูลสินค้าครับ');
+                    setConfirmModal({
+                      isOpen: true,
+                      title: 'เกิดข้อผิดพลาดในการบันทึก',
+                      message: err.message || 'เกิดข้อผิดพลาดในการบันทึกข้อมูลสินค้าครับ',
+                      confirmText: 'ปิด',
+                      cancelText: null,
+                      type: 'warning',
+                    });
                   } finally {
                     setIsSavingProduct(false);
+                    setIsProductRefreshing(false);
                   }
                 }} className="space-y-4">
                   <div>
@@ -2307,7 +2409,14 @@ export default function AdminPanel() {
                   const targetName = categoryForm.name.trim().toLowerCase();
                   const isDuplicate = categories.some(c => c.name.trim().toLowerCase() === targetName && (!editingCategory || c.id !== editingCategory.id));
                   if (isDuplicate) {
-                    alert(`⚠️ มีประเภทสินค้าชื่อ "${categoryForm.name}" อยู่ในระบบแล้วครับ กรุณาใช้ชื่ออื่น`);
+                    setConfirmModal({
+                      isOpen: true,
+                      title: 'ชื่อประเภทสินค้าซ้ำในระบบ',
+                      message: `มีประเภทสินค้าชื่อ "${categoryForm.name}" อยู่ในระบบแล้วครับ กรุณาใช้ชื่ออื่น`,
+                      confirmText: 'เข้าใจแล้ว',
+                      cancelText: null,
+                      type: 'warning',
+                    });
                     return;
                   }
 
@@ -2318,11 +2427,19 @@ export default function AdminPanel() {
                     } else {
                       await createCategory(categoryForm);
                     }
+                    await new Promise(res => setTimeout(res, 350)); // Smooth fast loading feedback (350ms)
                     setIsCategoryModalOpen(false);
                     loadData(false);
                   } catch (err: any) {
                     console.error('Error saving category:', err);
-                    alert(err.message || 'เกิดข้อผิดพลาดในการบันทึกประเภทสินค้าครับ');
+                    setConfirmModal({
+                      isOpen: true,
+                      title: 'เกิดข้อผิดพลาดในการบันทึก',
+                      message: err.message || 'เกิดข้อผิดพลาดในการบันทึกประเภทสินค้าครับ',
+                      confirmText: 'ปิด',
+                      cancelText: null,
+                      type: 'warning',
+                    });
                   } finally {
                     setIsSavingCategory(false);
                   }
@@ -2824,6 +2941,18 @@ export default function AdminPanel() {
               </div>
             </div>
           )}
+
+          {/* Custom Confirm & Alert Modal */}
+          <ConfirmModal
+            isOpen={confirmModal.isOpen}
+            title={confirmModal.title}
+            message={confirmModal.message}
+            confirmText={confirmModal.confirmText}
+            cancelText={confirmModal.cancelText}
+            type={confirmModal.type}
+            onConfirm={confirmModal.onConfirm}
+            onClose={() => setConfirmModal(prev => ({ ...prev, isOpen: false }))}
+          />
 
         </div>
     </>

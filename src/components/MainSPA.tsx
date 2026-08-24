@@ -8,8 +8,10 @@ import Image from 'next/image';
 import { getProducts, getCategories } from '@/app/admin/actions';
 import { uploadFile, getUsers, createUser, updateUser, createOrder, updateOrder, getOrders, getChats, sendMessage, markChatRead, sendOtpAction, getReviews, createReview } from '@/app/actions';
 import { compressImage } from '@/lib/imageCompressor';
+import ConfirmModal, { ConfirmModalState } from '@/components/modals/ConfirmModal';
 
 interface Product {
+
   id: string;
   name: string;
   price: number;
@@ -334,7 +336,7 @@ export default function MainSPA({ initialPage = 'home' }: { initialPage?: 'home'
     }
   ];
 
-  const [orders, setOrders] = useState<Order[]>(initialOrders);
+  const [orders, setOrders] = useState<Order[]>([]);
   const [users, setUsers] = useState<UserProfile[]>(mockUsers);
 
   // Local date-time helper functions matching ICT (Thailand) Timezone
@@ -440,6 +442,7 @@ export default function MainSPA({ initialPage = 'home' }: { initialPage?: 'home'
   }, [initialPage]);
   const { currentUser, login: setCurrentUser, logout } = useAuth(); // setCurrentUser maps to login for backward compat
   const [isUserDropdownOpen, setIsUserDropdownOpen] = useState(false);
+  const [confirmModal, setConfirmModal] = useState<ConfirmModalState>({ isOpen: false, message: '' });
 
   // Real authentication states
   const [isLoginModalOpen, setIsLoginModalOpen] = useState(false);
@@ -504,24 +507,21 @@ export default function MainSPA({ initialPage = 'home' }: { initialPage?: 'home'
             setCategories(initialCategories);
           }
         }).catch(e => console.error("Failed to load categories:", e)),
+
+        getOrders().then(dbOrders => {
+          if (dbOrders) {
+            setOrders(dbOrders.map(o => ({ ...o, id: `ORD-${o.id.padStart(3, '0')}` })));
+          }
+        }).catch(e => console.error('Failed to load orders:', e)),
+
+        getReviews().then(dbReviews => {
+          if (dbReviews && dbReviews.length > 0) {
+            setReviews(dbReviews as ProductReview[]);
+          }
+        }).catch(err => console.error('Error fetching reviews from DB:', err)),
       ]).finally(() => {
         setIsLoaded(true);
         setIsDataLoading(false);
-      });
-
-      // Background secondary fetches
-      getOrders().then(dbOrders => {
-        if (dbOrders) {
-          setOrders(dbOrders.map(o => ({ ...o, id: `ORD-${o.id.padStart(3, '0')}` })));
-        }
-      }).catch(e => console.error('Failed to load orders:', e));
-
-      getReviews().then(dbReviews => {
-        if (dbReviews && dbReviews.length > 0) {
-          setReviews(dbReviews as ProductReview[]);
-        }
-      }).catch(err => {
-        console.error('Error fetching reviews from DB:', err);
       });
 
       // Cart is now managed by Context
@@ -585,29 +585,39 @@ export default function MainSPA({ initialPage = 'home' }: { initialPage?: 'home'
   }, [currentUser, isLoaded]);
 
   useEffect(() => {
-    if (isLoaded) {
+    if (isLoaded && orders) {
       try {
-        localStorage.setItem('maivzev_orders_v3', JSON.stringify(orders));
+        // Strip large base64 Data URLs before saving to localStorage to prevent QuotaExceededError
+        const sanitizedOrders = orders.map(o => ({
+          ...o,
+          slipUrl: (o.slipUrl && o.slipUrl.startsWith('data:')) ? undefined : o.slipUrl,
+          trackingImageUrl: (o.trackingImageUrl && o.trackingImageUrl.startsWith('data:')) ? undefined : o.trackingImageUrl,
+          refundSlipUrl: (o.refundSlipUrl && o.refundSlipUrl.startsWith('data:')) ? undefined : o.refundSlipUrl,
+        }));
+        localStorage.setItem('maivzev_orders_v3', JSON.stringify(sanitizedOrders));
       } catch (e) {
-        console.error('Failed to save orders to localStorage:', e);
         if (e instanceof DOMException && (e.name === 'QuotaExceededError' || e.name === 'NS_ERROR_DOM_QUOTA_REACHED')) {
-          // Self-healing: clear slip images from older orders to free space
-          const prunedOrders = orders.map((o, idx) => {
-            if (idx > 0) { // Keep slip only for the single most recent order to maximize space saving
-              return { ...o, slipUrl: undefined };
-            }
-            return o;
-          });
           try {
-            localStorage.setItem('maivzev_orders_v3', JSON.stringify(prunedOrders));
-            setOrders(prunedOrders);
-          } catch (retryError) {
-            console.error('Failed to save pruned orders:', retryError);
+            // Fallback: Store only lightweight order metadata (top 20) without image fields
+            const lightOrders = orders.slice(0, 20).map(o => ({
+              id: o.id,
+              username: o.username,
+              totalPrice: o.totalPrice,
+              paymentMethod: o.paymentMethod,
+              paymentStatus: o.paymentStatus,
+              orderStatus: o.orderStatus,
+              createdAt: o.createdAt,
+              items: o.items || []
+            }));
+            localStorage.setItem('maivzev_orders_v3', JSON.stringify(lightOrders));
+          } catch (fallbackErr) {
+            // Silently ignore if browser storage is completely full; DB retains full state
           }
         }
       }
     }
   }, [orders, isLoaded]);
+
 
 
 
@@ -5030,6 +5040,18 @@ export default function MainSPA({ initialPage = 'home' }: { initialPage?: 'home'
           </div>
         </div>
       )}
+
+      {/* Custom Confirm & Alert Modal */}
+      <ConfirmModal
+        isOpen={confirmModal.isOpen}
+        title={confirmModal.title}
+        message={confirmModal.message}
+        confirmText={confirmModal.confirmText}
+        cancelText={confirmModal.cancelText}
+        type={confirmModal.type}
+        onConfirm={confirmModal.onConfirm}
+        onClose={() => setConfirmModal(prev => ({ ...prev, isOpen: false }))}
+      />
     </div>
   );
 }
