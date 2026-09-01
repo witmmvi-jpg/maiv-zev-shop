@@ -334,3 +334,76 @@ export async function deleteUser(id: number) {
   revalidatePath('/');
   return { success: true };
 }
+
+// Article Actions
+export async function getArticles() {
+  const articles = await prisma.article.findMany({ orderBy: { article_id: 'desc' } });
+  return articles.map(a => ({
+    id: a.article_id,
+    title: a.title,
+    excerpt: a.excerpt || '',
+    content: a.content || '',
+    image: a.image || '',
+    category: a.category || 'สาระน่ารู้',
+    date: a.date ? a.date.toISOString().split('T')[0] : new Date().toISOString().split('T')[0],
+  }));
+}
+
+export async function createArticle(data: {
+  title: string;
+  excerpt?: string;
+  content?: string;
+  image?: string;
+  category?: string;
+  date?: string;
+}) {
+  const article = await prisma.article.create({
+    data: {
+      title: data.title,
+      excerpt: data.excerpt || null,
+      content: data.content || null,
+      image: data.image || null,
+      category: data.category || 'สาระน่ารู้',
+      date: data.date ? new Date(data.date) : new Date(),
+    },
+  });
+  revalidatePath('/admin');
+  revalidatePath('/');
+  revalidatePath('/articles');
+  return { success: true, article };
+}
+
+export async function updateArticle(id: number, data: {
+  title?: string;
+  excerpt?: string;
+  content?: string;
+  image?: string;
+  category?: string;
+  date?: string;
+}) {
+  const updateData: any = {};
+  if (data.title !== undefined) updateData.title = data.title;
+  if (data.excerpt !== undefined) updateData.excerpt = data.excerpt;
+  if (data.content !== undefined) updateData.content = data.content;
+  if (data.image !== undefined) updateData.image = data.image;
+  if (data.category !== undefined) updateData.category = data.category;
+  if (data.date !== undefined) updateData.date = data.date ? new Date(data.date) : new Date();
+
+  const article = await prisma.article.update({
+    where: { article_id: id },
+    data: updateData,
+  });
+  revalidatePath('/admin');
+  revalidatePath('/');
+  revalidatePath('/articles');
+  return { success: true, article };
+}
+
+export async function deleteArticle(id: number) {
+  await prisma.article.delete({ where: { article_id: id } });
+  revalidatePath('/admin');
+  revalidatePath('/');
+  revalidatePath('/articles');
+  return { success: true };
+}
+

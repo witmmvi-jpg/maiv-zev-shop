@@ -6,7 +6,7 @@ import { useAuth } from '@/providers/AuthProvider';
 import { useCart } from '@/providers/CartProvider';
 import Image from 'next/image';
 import { getProducts, getCategories } from '@/app/admin/actions';
-import { uploadFile, getUsers, createUser, updateUser, createOrder, updateOrder, getOrders, getChats, sendMessage, markChatRead, sendOtpAction, getReviews, createReview } from '@/app/actions';
+import { uploadFile, getUsers, createUser, updateUser, createOrder, updateOrder, getOrders, getChats, sendMessage, markChatRead, sendOtpAction, getReviews, createReview, getArticles } from '@/app/actions';
 import { compressImage } from '@/lib/imageCompressor';
 import ConfirmModal, { ConfirmModalState } from '@/components/modals/ConfirmModal';
 
@@ -398,6 +398,7 @@ export default function MainSPA({ initialPage = 'home' }: { initialPage?: 'home'
   const mockReviews: ProductReview[] = [];
 
   const [reviews, setReviews] = useState<ProductReview[]>([]);
+  const [articles, setArticles] = useState<Article[]>(initialArticles);
   const [selectedProductDetail, setSelectedProductDetail] = useState<Product | null>(null);
   const [reviewRating, setReviewRating] = useState<number>(5);
   const [reviewComment, setReviewComment] = useState<string>('');
@@ -519,6 +520,12 @@ export default function MainSPA({ initialPage = 'home' }: { initialPage?: 'home'
             setReviews(dbReviews as ProductReview[]);
           }
         }).catch(err => console.error('Error fetching reviews from DB:', err)),
+
+        getArticles().then(dbArticles => {
+          if (dbArticles && dbArticles.length > 0) {
+            setArticles(dbArticles as Article[]);
+          }
+        }).catch(err => console.error('Error fetching articles from DB:', err)),
       ]).finally(() => {
         setIsLoaded(true);
         setIsDataLoading(false);
@@ -3182,7 +3189,7 @@ export default function MainSPA({ initialPage = 'home' }: { initialPage?: 'home'
 
                 {/* Article Grid */}
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
-                  {initialArticles.map((article) => (
+                  {articles.map((article) => (
                     <article
                       key={article.id}
                       className="group bg-white rounded-3xl overflow-hidden border border-stone-200/60 shadow-sm hover:shadow-xl transition-all duration-300 flex flex-col transform hover:-translate-y-1.5"

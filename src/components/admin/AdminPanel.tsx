@@ -7,7 +7,7 @@ import React, { useState, useEffect } from 'react';
 import { useAuth } from '@/providers/AuthProvider';
 import { useRef } from 'react';
 import { Product, Order, UserProfile, Category, ProductReview, OrderItem } from '@/types';
-import { getDashboardStats, getProducts, createProduct, updateProduct, deleteProduct, getCategories, createCategory, updateCategory, deleteCategory, getOrders, updateOrderStatus, getUsers, updateUserRole, deleteUser, createUser, updateUser } from '@/app/admin/actions';
+import { getDashboardStats, getProducts, createProduct, updateProduct, deleteProduct, getCategories, createCategory, updateCategory, deleteCategory, getOrders, updateOrderStatus, getUsers, updateUserRole, deleteUser, createUser, updateUser, getArticles, createArticle, updateArticle, deleteArticle } from '@/app/admin/actions';
 import { uploadFile, getChats, sendMessage, markChatRead, sendEmail } from '@/app/actions';
 import LoginModal from '@/components/modals/LoginModal';
 import RichTextEditor from '@/components/admin/RichTextEditor';
@@ -25,7 +25,7 @@ export default function AdminPanel() {
 
 
   
-  const [adminTab, setAdminTab] = useState<'dashboard' | 'products' | 'categories' | 'orders' | 'members' | 'payments' | 'chats' | 'emails'>('dashboard');
+  const [adminTab, setAdminTab] = useState<'dashboard' | 'products' | 'categories' | 'orders' | 'members' | 'payments' | 'chats' | 'emails' | 'articles'>('dashboard');
   
   const getLocalYearMonthDynamic = (): string => {
     const d = new Date();
@@ -54,6 +54,11 @@ export default function AdminPanel() {
     { id: 1, username: 'ยายมี (ผู้ดูแลระบบ)', email: 'admin@maivzev.com', phone: '0654695103', role: 'Admin', profileImage: '/images/logo.png' },
     { id: 2, username: 'somchai_member', email: 'somchai@example.com', phone: '0898765432', role: 'Member', profileImage: '' },
     { id: 3, username: 'sodsai_customer', email: 'customer@example.com', phone: '0812345678', role: 'User', profileImage: '' }
+  ];
+
+  const initialArticlesFallback = [
+    { id: 1, title: 'องุ่นไร้เมล็ด vs องุ่นแดง: แตกต่างกันอย่างไรและเลือกแบบไหนดีต่อสุขภาพ?', excerpt: 'เปรียบเทียบสารอาหาร รสชาติ และสรรพคุณขององุ่นสองชนิดยอดนิยมจากสวน Maiv Zev เพื่อช่วยคุณตัดสินใจเลือกสิ่งที่ดีที่สุดสำหรับครอบครัว', content: 'องุ่นไร้เมล็ด vs องุ่นแดง...', image: '/images/black_grapes.png', category: 'ผลไม้สุขภาพ', date: '2026-07-05' },
+    { id: 2, title: 'ข้าวหอมมะลิ vs ข้าวเหนียวเขี้ยวงู: คุณค่าทางอาหารและพลังงานที่แตกต่าง', excerpt: 'เจาะลึกประโยชน์และสรรพคุณของข้าวสาร 2 ชนิดหลักของสวนเรา ปลูกด้วยวิถีอินทรีย์ธรรมชาติ เพื่อการเลือกบริโภคที่เหมาะกับกิจกรรมประจำวันของคุณ', content: 'ข้าวหอมมะลิ vs ข้าวเหนียว...', image: '/images/jasmine_rice.png', category: 'ข้าวสุขภาพ', date: '2026-07-06' }
   ];
 
   // Dashboard states
@@ -97,6 +102,7 @@ export default function AdminPanel() {
   const [orders, setOrders] = useState<any[]>([]);
   const [users, setUsers] = useState<any[]>([]);
   const [reviews, setReviews] = useState<any[]>([]);
+  const [articles, setArticles] = useState<any[]>([]);
   
   // Modals & Form states
   const [isProductModalOpen, setIsProductModalOpen] = useState(false);
@@ -107,6 +113,19 @@ export default function AdminPanel() {
   const [editingCategory, setEditingCategory] = useState<any | null>(null);
   const [categoryForm, setCategoryForm] = useState<any>({});
   const [adminCategoryFilter, setAdminCategoryFilter] = useState<string>('ทั้งหมด');
+
+  const [isArticleModalOpen, setIsArticleModalOpen] = useState(false);
+  const [editingArticle, setEditingArticle] = useState<any | null>(null);
+  const [articleForm, setArticleForm] = useState<any>({
+    title: '',
+    category: 'สาระน่ารู้',
+    image: '',
+    excerpt: '',
+    content: '',
+    date: new Date().toISOString().split('T')[0],
+  });
+  const [isSavingArticle, setIsSavingArticle] = useState<boolean>(false);
+  const [isUploadingArticleImage, setIsUploadingArticleImage] = useState<boolean>(false);
 
   const [isUserModalOpen, setIsUserModalOpen] = useState(false);
   const [editingUser, setEditingUser] = useState<any | null>(null);
@@ -267,21 +286,131 @@ export default function AdminPanel() {
   const loadData = async (showLoading = true) => {
     if (showLoading) setIsAdminDataLoading(true);
     try {
-      const [_products, _categories, _orders, _users] = await Promise.all([
+      const [_products, _categories, _orders, _users, _articles] = await Promise.all([
         getProducts().catch(() => []),
         getCategories().catch(() => []),
         getOrders().catch(() => []),
         getUsers().catch(() => []),
+        getArticles().catch(() => []),
       ]);
       setProducts(_products && _products.length > 0 ? _products : initialProductsFallback);
       setCategories(_categories && _categories.length > 0 ? _categories : initialCategoriesFallback);
       setOrders(_orders && _orders.length > 0 ? _orders : initialOrdersFallback);
       setUsers(_users && _users.length > 0 ? _users : initialUsersFallback);
+      setArticles(_articles && _articles.length > 0 ? _articles : initialArticlesFallback);
     } catch (e) {
       console.error(e);
     } finally {
       setIsAdminDataLoading(false);
     }
+  };
+
+  const handleArticleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!articleForm.title || !articleForm.title.trim()) {
+      setConfirmModal({
+        isOpen: true,
+        title: 'ข้อมูลไม่ครบถ้วน',
+        message: 'กรุณากรอกชื่อบทความครับ',
+        confirmText: 'เข้าใจแล้ว',
+        cancelText: null,
+        type: 'warning',
+      });
+      return;
+    }
+    setIsSavingArticle(true);
+    try {
+      if (editingArticle) {
+        await updateArticle(editingArticle.id, articleForm);
+        await loadData(false);
+        setIsArticleModalOpen(false);
+        setEditingArticle(null);
+        setArticleForm({
+          title: '',
+          category: 'สาระน่ารู้',
+          image: '',
+          excerpt: '',
+          content: '',
+          date: new Date().toISOString().split('T')[0],
+        });
+        setConfirmModal({
+          isOpen: true,
+          title: 'อัปเดตบทความสำเร็จ',
+          message: 'อัปเดตข้อมูลบทความเรียบร้อยแล้วครับ',
+          confirmText: 'ตกลง',
+          cancelText: null,
+          type: 'success',
+        });
+      } else {
+        await createArticle(articleForm);
+        await loadData(false);
+        setIsArticleModalOpen(false);
+        setEditingArticle(null);
+        setArticleForm({
+          title: '',
+          category: 'สาระน่ารู้',
+          image: '',
+          excerpt: '',
+          content: '',
+          date: new Date().toISOString().split('T')[0],
+        });
+        setConfirmModal({
+          isOpen: true,
+          title: 'เพิ่มบทความสำเร็จ',
+          message: 'เพิ่มบทความใหม่เรียบร้อยแล้วครับ',
+          confirmText: 'ตกลง',
+          cancelText: null,
+          type: 'success',
+        });
+      }
+    } catch (err: any) {
+      console.error('Error submitting article:', err);
+      setConfirmModal({
+        isOpen: true,
+        title: 'เกิดข้อผิดพลาดในการบันทึก',
+        message: err.message || 'เกิดข้อผิดพลาดในการบันทึกข้อมูลบทความครับ',
+        confirmText: 'ปิด',
+        cancelText: null,
+        type: 'warning',
+      });
+    } finally {
+      setIsSavingArticle(false);
+    }
+  };
+
+  const handleDeleteArticle = async (id: number) => {
+    setConfirmModal({
+      isOpen: true,
+      title: 'ยืนยันการลบบทความ',
+      message: 'คุณแน่ใจหรือไม่ว่าต้องการลบบทความนี้ออกจากระบบ?',
+      confirmText: 'ลบบทความ',
+      cancelText: 'ยกเลิก',
+      type: 'delete',
+      onConfirm: async () => {
+        try {
+          await deleteArticle(id);
+          await loadData(false);
+          setConfirmModal({
+            isOpen: true,
+            title: 'ลบบทความสำเร็จ',
+            message: 'ลบบทความออกจากระบบเรียบร้อยแล้วครับ',
+            confirmText: 'ตกลง',
+            cancelText: null,
+            type: 'success',
+          });
+        } catch (err: any) {
+          console.error('Error deleting article:', err);
+          setConfirmModal({
+            isOpen: true,
+            title: 'เกิดข้อผิดพลาดในการลบ',
+            message: err.message || 'เกิดข้อผิดพลาดในการลบบทความครับ',
+            confirmText: 'ปิด',
+            cancelText: null,
+            type: 'warning',
+          });
+        }
+      }
+    });
   };
 
   const handleAdminSendChatMessage = async () => {
@@ -473,6 +602,14 @@ export default function AdminPanel() {
                     }`}
                 >
                   <span>📧</span> ส่งอีเมลแจ้งเตือน
+                </button>
+
+                <button
+                  onClick={() => setAdminTab('articles')}
+                  className={`w-full text-left px-4 py-3.5 rounded-2xl font-bold text-sm transition-all flex items-center gap-3 ${adminTab === 'articles' ? 'bg-purple-50 text-purple-700 border-l-4 border-purple-600' : 'text-stone-600 hover:bg-stone-50'
+                    }`}
+                >
+                  <span>📰</span> จัดการบทความ
                 </button>
               </div>
 
@@ -2185,6 +2322,111 @@ export default function AdminPanel() {
                     </form>
                   </div>
                 )}
+
+                {/* 8. ARTICLES MANAGEMENT TAB */}
+                {adminTab === 'articles' && (
+                  <div className="space-y-6 animate-in fade-in duration-300">
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-stone-50/80 p-5 rounded-2xl border border-stone-150">
+                      <div>
+                        <h3 className="text-xl font-bold text-stone-900 flex items-center gap-2">
+                          <span>📰</span> จัดการบทความน่ารู้ (Article Management)
+                        </h3>
+                        <p className="text-xs text-stone-500 font-medium">เพิ่ม แก้ไข และลบบทความพร้อมรูปภาพประกอบที่จะแสดงบนหน้าร้านค้า</p>
+                      </div>
+                      <button
+                        onClick={() => {
+                          setEditingArticle(null);
+                          setArticleForm({
+                            title: '',
+                            category: 'สาระน่ารู้',
+                            image: '',
+                            excerpt: '',
+                            content: '',
+                            date: new Date().toISOString().split('T')[0],
+                          });
+                          setIsArticleModalOpen(true);
+                        }}
+                        className="py-2.5 px-5 rounded-2xl bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold text-xs shadow-md shadow-emerald-600/20 transition-all flex items-center gap-2 cursor-pointer"
+                      >
+                        <span>➕</span> เพิ่มบทความใหม่
+                      </button>
+                    </div>
+
+                    {/* Articles Grid */}
+                    {articles.length === 0 ? (
+                      <div className="text-center py-16 bg-white rounded-3xl border border-stone-200/60 shadow-sm space-y-3">
+                        <span className="text-5xl block">📰</span>
+                        <h4 className="text-base font-bold text-stone-700">ยังไม่มีบทความในระบบ</h4>
+                        <p className="text-xs text-stone-400">กดปุ่ม "เพิ่มบทความใหม่" ด้านบนเพื่อเริ่มสร้างบทความแรกของคุณ</p>
+                      </div>
+                    ) : (
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                        {articles.map((art: any) => (
+                          <div key={art.id} className="bg-white rounded-3xl border border-stone-200/80 shadow-sm hover:shadow-md transition-all overflow-hidden flex flex-col justify-between">
+                            <div>
+                              {/* Image Banner */}
+                              <div className="relative h-44 bg-stone-100 overflow-hidden group">
+                                {art.image ? (
+                                  <img src={art.image} alt={art.title} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300" />
+                                ) : (
+                                  <div className="w-full h-full flex items-center justify-center text-stone-300 text-4xl font-bold bg-stone-100">
+                                    🖼️ ไม่มีรูปภาพ
+                                  </div>
+                                )}
+                                <div className="absolute top-3 left-3 flex gap-2">
+                                  <span className="bg-emerald-600/90 backdrop-blur-md text-white text-[11px] font-bold px-3 py-1 rounded-full shadow-sm">
+                                    {art.category || 'สาระน่ารู้'}
+                                  </span>
+                                </div>
+                                {art.date && (
+                                  <span className="absolute bottom-3 right-3 bg-stone-900/70 backdrop-blur-md text-white text-[10px] font-medium px-2.5 py-1 rounded-full">
+                                    📅 {art.date}
+                                  </span>
+                                )}
+                              </div>
+
+                              {/* Body */}
+                              <div className="p-5 space-y-2">
+                                <h4 className="text-base font-bold text-stone-900 line-clamp-2 leading-snug">{art.title}</h4>
+                                <p className="text-xs text-stone-600 line-clamp-3 font-normal leading-relaxed">{art.excerpt || art.content}</p>
+                              </div>
+                            </div>
+
+                            {/* Footer Actions */}
+                            <div className="p-4 bg-stone-50/80 border-t border-stone-150 flex items-center justify-between gap-2">
+                              <span className="text-[10px] font-bold text-stone-400">ID: #{art.id}</span>
+                              <div className="flex gap-2">
+                                <button
+                                  onClick={() => {
+                                    setEditingArticle(art);
+                                    setArticleForm({
+                                      title: art.title || '',
+                                      category: art.category || 'สาระน่ารู้',
+                                      image: art.image || '',
+                                      excerpt: art.excerpt || '',
+                                      content: art.content || '',
+                                      date: art.date || new Date().toISOString().split('T')[0],
+                                    });
+                                    setIsArticleModalOpen(true);
+                                  }}
+                                  className="px-3.5 py-1.5 rounded-xl bg-purple-50 hover:bg-purple-100 text-purple-700 font-bold text-xs transition-colors flex items-center gap-1 cursor-pointer"
+                                >
+                                  ✏️ แก้ไข
+                                </button>
+                                <button
+                                  onClick={() => handleDeleteArticle(Number(art.id))}
+                                  className="px-3.5 py-1.5 rounded-xl bg-red-50 hover:bg-red-100 text-red-600 font-bold text-xs transition-colors flex items-center gap-1 cursor-pointer"
+                                >
+                                  🗑️ ลบ
+                                </button>
+                              </div>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                )}
               </>
             )}
           </div>
@@ -2953,6 +3195,171 @@ export default function AdminPanel() {
             onConfirm={confirmModal.onConfirm}
             onClose={() => setConfirmModal(prev => ({ ...prev, isOpen: false }))}
           />
+
+          {/* Article Add/Edit Modal */}
+          {isArticleModalOpen && (
+            <div className="fixed inset-0 z-50 overflow-y-auto flex items-center justify-center p-4 bg-stone-900/60 backdrop-blur-sm animate-in zoom-in-95 duration-200">
+              <div className="bg-white rounded-3xl max-w-2xl w-full p-6 shadow-2xl border border-stone-100 space-y-5 my-8">
+                <div className="flex justify-between items-center pb-3 border-b border-stone-150">
+                  <h4 className="text-lg font-bold text-stone-900 flex items-center gap-2">
+                    <span>📰</span> {editingArticle ? 'แก้ไขบทความ' : 'เพิ่มบทความใหม่'}
+                  </h4>
+                  <button
+                    onClick={() => {
+                      setIsArticleModalOpen(false);
+                      setEditingArticle(null);
+                    }}
+                    className="text-stone-400 hover:text-stone-600 font-bold text-lg cursor-pointer"
+                  >
+                    ✕
+                  </button>
+                </div>
+
+                <form onSubmit={handleArticleSubmit} className="space-y-4">
+                  <div>
+                    <label className="block font-bold text-stone-700 mb-1 text-xs">ชื่อบทความ (Title) *</label>
+                    <input
+                      type="text"
+                      required
+                      value={articleForm.title || ''}
+                      onChange={(e) => setArticleForm({ ...articleForm, title: e.target.value })}
+                      placeholder="เช่น องุ่นไร้เมล็ด vs องุ่นแดง: แตกต่างกันอย่างไร?"
+                      className="w-full px-3.5 py-2.5 rounded-xl border border-stone-200 focus:outline-none focus:border-emerald-500 text-stone-900 font-semibold text-xs"
+                    />
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div>
+                      <label className="block font-bold text-stone-700 mb-1 text-xs">หมวดหมู่บทความ (Category)</label>
+                      <input
+                        type="text"
+                        value={articleForm.category || ''}
+                        onChange={(e) => setArticleForm({ ...articleForm, category: e.target.value })}
+                        placeholder="เช่น ผลไม้สุขภาพ, ข้าวสุขภาพ, สาระน่ารู้"
+                        className="w-full px-3.5 py-2.5 rounded-xl border border-stone-200 focus:outline-none focus:border-emerald-500 text-stone-900 font-semibold text-xs"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block font-bold text-stone-700 mb-1 text-xs">วันที่ลงบทความ (Date)</label>
+                      <input
+                        type="date"
+                        value={articleForm.date || ''}
+                        onChange={(e) => setArticleForm({ ...articleForm, date: e.target.value })}
+                        className="w-full px-3.5 py-2.5 rounded-xl border border-stone-200 focus:outline-none focus:border-emerald-500 text-stone-900 font-semibold text-xs"
+                      />
+                    </div>
+                  </div>
+
+                  {/* Image Input & Upload */}
+                  <div>
+                    <label className="block font-bold text-stone-700 mb-1 text-xs">รูปภาพประกอบบทความ (Article Image)</label>
+                    <div className="flex flex-col sm:flex-row items-center gap-3">
+                      {articleForm.image && (
+                        <div className="relative w-20 h-20 rounded-2xl overflow-hidden border border-stone-200 flex-shrink-0 bg-stone-50">
+                          <img src={articleForm.image} alt="Preview" className="w-full h-full object-cover" />
+                        </div>
+                      )}
+                      <div className="flex-1 space-y-2 w-full">
+                        <input
+                          type="text"
+                          disabled={isSavingArticle || isUploadingArticleImage}
+                          value={articleForm.image || ''}
+                          onChange={(e) => setArticleForm({ ...articleForm, image: e.target.value })}
+                          placeholder="กรอก URL รูปภาพ หรือกดปุ่มอัปโหลดรูปภาพ"
+                          className="w-full px-3.5 py-2 rounded-xl border border-stone-200 focus:outline-none focus:border-emerald-500 text-stone-900 text-xs disabled:bg-stone-100"
+                        />
+                        <div className="flex items-center gap-2">
+                          <label className={`px-3.5 py-2 rounded-xl bg-emerald-50 hover:bg-emerald-100 text-emerald-700 font-bold text-xs transition-colors border border-emerald-200 cursor-pointer inline-flex items-center gap-1.5 ${isUploadingArticleImage ? 'opacity-70 cursor-not-allowed' : ''}`}>
+                            {isUploadingArticleImage ? (
+                              <>
+                                <div className="w-3.5 h-3.5 border-2 border-emerald-600 border-t-transparent rounded-full animate-spin" />
+                                <span>กำลังอัปโหลดรูปภาพ...</span>
+                              </>
+                            ) : (
+                              <>
+                                <span>📷</span>
+                                <span>อัปโหลดรูปภาพ</span>
+                              </>
+                            )}
+                            <input
+                              type="file"
+                              accept="image/*"
+                              disabled={isUploadingArticleImage || isSavingArticle}
+                              onChange={async (e) => {
+                                const file = e.target.files?.[0];
+                                if (!file) return;
+                                setIsUploadingArticleImage(true);
+                                try {
+                                  await handleImageUpload(file, (url) => setArticleForm(prev => ({ ...prev, image: url })));
+                                } finally {
+                                  setIsUploadingArticleImage(false);
+                                }
+                              }}
+                              className="hidden"
+                            />
+                          </label>
+                          <span className="text-[10px] text-stone-400">รองรับไฟล์รูปภาพ JPG, PNG, WebP (สูงสุด 20MB)</span>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="block font-bold text-stone-700 mb-1 text-xs">เรื่องย่อ / บทย่อ (Excerpt)</label>
+                    <textarea
+                      rows={2}
+                      disabled={isSavingArticle || isUploadingArticleImage}
+                      value={articleForm.excerpt || ''}
+                      onChange={(e) => setArticleForm({ ...articleForm, excerpt: e.target.value })}
+                      placeholder="สรุปเนื้อหาสั้นๆ 2-3 บรรทัด เพื่อแสดงในการ์ดหน้ารายการบทความ"
+                      className="w-full px-3.5 py-2.5 rounded-xl border border-stone-200 focus:outline-none focus:border-emerald-500 text-stone-900 font-normal text-xs disabled:bg-stone-100"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block font-bold text-stone-700 mb-1 text-xs">เนื้อหาบทความฉบับเต็ม (Content)</label>
+                    <textarea
+                      rows={6}
+                      disabled={isSavingArticle || isUploadingArticleImage}
+                      value={articleForm.content || ''}
+                      onChange={(e) => setArticleForm({ ...articleForm, content: e.target.value })}
+                      placeholder="กรอกเนื้อหาฉบับเต็มของบทความ..."
+                      className="w-full px-3.5 py-2.5 rounded-xl border border-stone-200 focus:outline-none focus:border-emerald-500 text-stone-900 font-normal text-xs disabled:bg-stone-100"
+                    />
+                  </div>
+
+                  <div className="flex justify-end gap-2 pt-4 border-t border-stone-150">
+                    <button
+                      type="button"
+                      disabled={isSavingArticle || isUploadingArticleImage}
+                      onClick={() => {
+                        setIsArticleModalOpen(false);
+                        setEditingArticle(null);
+                      }}
+                      className="px-4 py-2.5 rounded-xl bg-stone-100 hover:bg-stone-200 text-stone-700 font-bold text-xs transition-colors cursor-pointer disabled:opacity-50"
+                    >
+                      ยกเลิก
+                    </button>
+                    <button
+                      type="submit"
+                      disabled={isSavingArticle || isUploadingArticleImage}
+                      className="px-6 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs transition-colors shadow-md shadow-emerald-600/20 cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                    >
+                      {isSavingArticle ? (
+                        <>
+                          <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                          <span>กำลังบันทึกบทความ...</span>
+                        </>
+                      ) : (
+                        <span>{editingArticle ? 'บันทึกการแก้ไข' : 'เพิ่มบทความใหม่'}</span>
+                      )}
+                    </button>
+                  </div>
+                </form>
+              </div>
+            </div>
+          )}
 
         </div>
     </>
