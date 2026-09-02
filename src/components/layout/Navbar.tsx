@@ -3,23 +3,50 @@
 import React, { useState, useRef, useEffect } from 'react';
 import Link from 'next/link';
 import Image from 'next/image';
-import { usePathname } from 'next/navigation';
+import { usePathname, useRouter } from 'next/navigation';
 import { useAuth } from '@/providers/AuthProvider';
 import { useCart } from '@/providers/CartProvider';
+import { useModalAlert } from '@/providers/ModalAlertProvider';
 import { uploadFile, updateUser } from '@/app/actions';
 import { compressImage } from '@/lib/imageCompressor';
 import LoginModal from '@/components/modals/LoginModal';
 
 export default function Navbar() {
   const pathname = usePathname();
+  const router = useRouter();
   const { currentUser, login: setCurrentUser, logout } = useAuth();
   const { cart } = useCart();
+  const { showConfirm, showAlert } = useModalAlert();
   const [isUserDropdownOpen, setIsUserDropdownOpen] = useState(false);
   const [isLoginModalOpen, setIsLoginModalOpen] = useState(false);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
 
   const cartItemsCount = cart.reduce((sum, item) => sum + item.quantity, 0);
+
+  const handleLogout = async () => {
+    setIsUserDropdownOpen(false);
+    const confirmed = await showConfirm(
+      'คุณต้องการออกจากระบบใช่หรือไม่?',
+      'ยืนยันที่จะออกจากระบบใช่หรือไม่',
+      'ออกจากระบบ',
+      'ยกเลิก',
+      'logout'
+    );
+
+    if (confirmed) {
+      logout();
+      router.push('/');
+      if (typeof window !== 'undefined') {
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+      }
+      await showAlert(
+        'ออกจากระบบสำเร็จเรียบร้อยแล้ว\nขอบคุณที่ใช้บริการ Maiv Zev Shop ครับ 👋',
+        'ออกจากระบบสำเร็จ',
+        'success'
+      );
+    }
+  };
 
   useEffect(() => {
     if (!isUserDropdownOpen) return;
@@ -192,13 +219,10 @@ export default function Navbar() {
                           )}
                           
                           <button
-                            onClick={() => {
-                              logout();
-                              setIsUserDropdownOpen(false);
-                            }}
-                            className="w-full text-left px-3 py-2 rounded-xl text-xs text-red-600 hover:bg-red-50 hover:text-red-700 font-semibold transition-colors flex items-center gap-2"
+                            onClick={handleLogout}
+                            className="w-full text-left px-3 py-2 rounded-xl text-xs text-red-600 hover:bg-red-50 hover:text-red-700 font-semibold transition-colors flex items-center gap-2 cursor-pointer"
                           >
-                            ออกจากระบบ
+                            🚪 ออกจากระบบ
                           </button>
                         </div>
                       </div>
