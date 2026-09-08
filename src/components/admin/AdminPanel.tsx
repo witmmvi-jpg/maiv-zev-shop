@@ -256,6 +256,7 @@ export default function AdminPanel() {
 
   useEffect(() => {
     loadData(true);
+    loadChats();
   }, []);
 
   const loadChats = async () => {
