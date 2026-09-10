@@ -1,17 +1,5 @@
 const fs = require('fs');
-
-const file = 'src/components/MainSPA.tsx';
-const content = fs.readFileSync(file, 'utf8');
-
-// Find start of admin block
-const startStr = "{viewMode === 'admin' ? (";
-const startIdx = content.indexOf(startStr);
-
-if (startIdx !== -1) {
-    let braceCount = 1;
-    let endIdx = startIdx + startStr.length;
-    let foundEnd = false;
-    
-    // We need to match the parenthesis of `{viewMode === 'admin' ? ( ... ) : ( ... )}`
-    // But it's easier to use line numbers since we know where it is approximately.
-}
+const buffer = fs.readFileSync('public/fonts/THSarabunNew-v2.ttf');
+const base64 = buffer.toString('base64');
+fs.writeFileSync('src/components/admin/THSarabunNewBase64.ts', `export const THSarabunNewBase64 = "${base64}";\n`);
+console.log("Done!");

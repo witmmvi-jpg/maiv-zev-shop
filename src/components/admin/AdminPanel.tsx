@@ -14,6 +14,10 @@ import RichTextEditor from '@/components/admin/RichTextEditor';
 import { compressImage } from '@/lib/imageCompressor';
 import SalesBarChart from '@/components/admin/SalesBarChart';
 import ConfirmModal, { ConfirmModalState } from '@/components/modals/ConfirmModal';
+import * as XLSX from 'xlsx';
+import jsPDF from 'jspdf';
+import autoTable from 'jspdf-autotable';
+import { THSarabunNewBase64 } from '@/components/admin/THSarabunNewBase64';
 
 export default function AdminPanel() {
   const { currentUser, isLoaded } = useAuth();
@@ -444,6 +448,324 @@ export default function AdminPanel() {
   // Format currency
   const formatCurrency = (val: number) => val.toLocaleString('th-TH');
 
+  const exportOrdersToExcel = () => {
+    const dataToExport = orders.map(order => ({
+      'รหัสออเดอร์': order.id,
+      'ลูกค้า': order.username,
+      'เบอร์โทรศัพท์': order.phone || '-',
+      'ที่อยู่จัดส่ง': order.shippingAddress || '-',
+      'รายการสินค้า': (order.items || []).map((item: any) => `${item.productName} (x${item.quantity} ${item.unit}) - ${item.price} บาท`).join(', '),
+      'ยอดรวม (บาท)': order.totalPrice,
+      'วิธีการชำระเงิน': order.paymentMethod || '-',
+      'สถานะการชำระเงิน': order.paymentStatus || '-',
+      'สถานะคำสั่งซื้อ': order.orderStatus,
+      'วันที่สั่งซื้อ': order.createdAt ? new Date(order.createdAt).toLocaleString('th-TH') : '-'
+    }));
+    const worksheet = XLSX.utils.json_to_sheet(dataToExport);
+    const workbook = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(workbook, worksheet, 'Orders');
+    XLSX.writeFile(workbook, 'orders_export.xlsx');
+  };
+
+  const exportOrdersToPDF = async () => {
+    try {
+      const doc = new jsPDF();
+      doc.addFileToVFS('THSarabunNew.ttf', THSarabunNewBase64);
+      doc.addFont('THSarabunNew.ttf', 'THSarabunNew', 'normal');
+      doc.setFont('THSarabunNew');
+      
+      doc.text('รายงานคำสั่งซื้อ (Orders Report)', 14, 15);
+      const tableColumn = ["รหัส", "ลูกค้า/ติดต่อ", "รายการสินค้า", "ยอดรวม", "ชำระเงิน", "สถานะออเดอร์"];
+      const tableRows = [];
+      orders.forEach(order => {
+        const itemsText = (order.items || []).map((item: any) => `${item.productName} (x${item.quantity})`).join('\n');
+        const contactInfo = `${order.username}\n${order.phone || '-'}`;
+        const paymentInfo = `${order.paymentMethod || '-'}\n${order.paymentStatus || '-'}`;
+        const orderData = [
+          order.id,
+          contactInfo,
+          itemsText,
+          order.totalPrice.toString(),
+          paymentInfo,
+          order.orderStatus
+        ];
+        tableRows.push(orderData);
+      });
+      autoTable(doc, {
+        head: [tableColumn],
+        body: tableRows,
+        startY: 20,
+        styles: { font: 'THSarabunNew', fontStyle: 'normal', cellPadding: 2, fontSize: 12 },
+        columnStyles: {
+          0: { cellWidth: 20 },
+          1: { cellWidth: 35 },
+          2: { cellWidth: 55 },
+          3: { cellWidth: 15 },
+          4: { cellWidth: 35 },
+          5: { cellWidth: 25 },
+        }
+      });
+      doc.save('orders_export.pdf');
+    } catch (error) {
+      console.error('Error generating PDF:', error);
+      alert('เกิดข้อผิดพลาดในการสร้างไฟล์ PDF (ไม่สามารถโหลดฟอนต์ภาษาไทยได้)');
+    }
+  };
+
+  const [exportFormat, setExportFormat] = useState<string>('excel');
+
+  const handleExport = async () => {
+    if (exportFormat === 'excel') exportOrdersToExcel();
+    else await exportOrdersToPDF();
+  };
+
+  const getFilteredDashboardOrders = () => {
+    const validOrders = orders.filter(o => o.orderStatus !== 'ยกเลิกการสั่งซื้อ' && o.orderStatus !== 'ยกเลิก');
+    return validOrders.filter(o => {
+      if (!o.createdAt || typeof o.createdAt !== 'string') return true;
+      const d = o.createdAt.substring(0, 10);
+      if (dashboardFilterMode === 'month') {
+        return o.createdAt.substring(0, 7) === selectedDashboardMonth;
+      }
+      if (dashboardFilterMode === 'year') {
+        return o.createdAt.substring(0, 4) === selectedDashboardYear;
+      }
+      if (dashboardFilterMode === 'range') {
+        if (selectedDashboardStartDate && d < selectedDashboardStartDate) return false;
+        if (selectedDashboardEndDate && d > selectedDashboardEndDate) return false;
+        return true;
+      }
+      return true;
+    });
+  };
+
+  const getTimelineSalesData = () => {
+    const paid = orders.filter(o => o.orderStatus !== 'ยกเลิกการสั่งซื้อ' && o.orderStatus !== 'ยกเลิก');
+    let salesData: [string, number][] = [];
+    if (dashboardPeriod === 'daily') {
+      const daily: { [k: string]: number } = {};
+      paid.forEach(o => {
+        const d = (o.createdAt && typeof o.createdAt === 'string') ? o.createdAt.substring(0, 10) : '2026-07-07';
+        daily[d] = (daily[d] || 0) + o.totalPrice;
+      });
+      let entries = Object.entries(daily);
+      if (breakdownSubMode === 'single' && singleDate) entries = entries.filter(([d]) => d === singleDate);
+      else if (breakdownSubMode === 'range') {
+        if (startDate) entries = entries.filter(([d]) => d >= startDate);
+        if (endDate) entries = entries.filter(([d]) => d <= endDate);
+      }
+      salesData = entries.sort((a, b) => b[0].localeCompare(a[0]));
+    } else if (dashboardPeriod === 'monthly') {
+      const monthly: { [k: string]: number } = {};
+      paid.forEach(o => {
+        const m = (o.createdAt && typeof o.createdAt === 'string') ? o.createdAt.substring(0, 7) : '2026-07';
+        monthly[m] = (monthly[m] || 0) + o.totalPrice;
+      });
+      let entries = Object.entries(monthly);
+      if (breakdownSubMode === 'single' && singleMonthFilter) entries = entries.filter(([m]) => m === singleMonthFilter);
+      else if (breakdownSubMode === 'range') {
+        if (startMonthFilter) entries = entries.filter(([m]) => m >= startMonthFilter);
+        if (endMonthFilter) entries = entries.filter(([m]) => m <= endMonthFilter);
+      }
+      salesData = entries.sort((a, b) => b[0].localeCompare(a[0]));
+    } else {
+      const yearly: { [k: string]: number } = {};
+      paid.forEach(o => {
+        const y = (o.createdAt && typeof o.createdAt === 'string') ? o.createdAt.substring(0, 4) : '2026';
+        yearly[y] = (yearly[y] || 0) + o.totalPrice;
+      });
+      let entries = Object.entries(yearly);
+      if (breakdownSubMode === 'single' && singleYearFilter) entries = entries.filter(([y]) => y === singleYearFilter);
+      else if (breakdownSubMode === 'range') {
+        if (startYearFilter) entries = entries.filter(([y]) => y >= startYearFilter);
+        if (endYearFilter) entries = entries.filter(([y]) => y <= endYearFilter);
+      }
+      salesData = entries.sort((a, b) => b[0].localeCompare(a[0]));
+    }
+    return salesData;
+  };
+
+  const getBestSellerProductSales = () => {
+    const paid = orders.filter(o => o.orderStatus !== 'ยกเลิกการสั่งซื้อ' && o.orderStatus !== 'ยกเลิก');
+    const filtered = paid.filter(o => {
+      if (!o.createdAt || typeof o.createdAt !== 'string') return true;
+      const d = o.createdAt.substring(0, 10);
+      const m = o.createdAt.substring(0, 7);
+      const y = o.createdAt.substring(0, 4);
+
+      if (bestSellerMode === 'month') return m === bestSellerSelectedMonth;
+      if (bestSellerMode === 'year') return y === bestSellerSelectedYear;
+      if (bestSellerMode === 'range') {
+        if (bestSellerStartDate && d < bestSellerStartDate) return false;
+        if (bestSellerEndDate && d > bestSellerEndDate) return false;
+        return true;
+      }
+      return true;
+    });
+
+    const productSales: { [name: string]: { qty: number; rev: number } } = {};
+    filtered.forEach(o => {
+      o.items.forEach(item => {
+        if (!productSales[item.productName]) productSales[item.productName] = { qty: 0, rev: 0 };
+        productSales[item.productName].qty += item.quantity;
+        productSales[item.productName].rev += item.quantity * item.price;
+      });
+    });
+    return Object.entries(productSales).sort((a, b) => b[1].qty - a[1].qty);
+  };
+
+  const exportDashboardToExcel = () => {
+    const validOrders = orders.filter(o => o.orderStatus !== 'ยกเลิกการสั่งซื้อ' && o.orderStatus !== 'ยกเลิก');
+    
+    // 1. Summary Section (uses dashboardFilterMode)
+    const summaryOrders = getFilteredDashboardOrders();
+    const periodRevenue = summaryOrders.reduce((sum, o) => sum + o.totalPrice, 0);
+    
+    // Find best seller in summary range for the card
+    const summaryProdSales: { [name: string]: number } = {};
+    summaryOrders.forEach(o => o.items.forEach(item => { summaryProdSales[item.productName] = (summaryProdSales[item.productName] || 0) + item.quantity; }));
+    let bestProduct = 'ไม่มีข้อมูล';
+    let maxQty = 0;
+    Object.entries(summaryProdSales).forEach(([name, qty]) => {
+      if (qty > maxQty) { maxQty = qty; bestProduct = name; }
+    });
+    const bestProductText = maxQty > 0 ? `${bestProduct} (${maxQty} ชิ้น/กก.)` : 'ไม่มีข้อมูล';
+
+    let summaryPeriodText = 'ทั้งหมด';
+    if (dashboardFilterMode === 'month') summaryPeriodText = selectedDashboardMonth;
+    if (dashboardFilterMode === 'year') summaryPeriodText = selectedDashboardYear;
+    if (dashboardFilterMode === 'range') summaryPeriodText = `${selectedDashboardStartDate || '-'} ถึง ${selectedDashboardEndDate || '-'}`;
+
+    const summaryData = [
+      { 'ข้อมูล': 'ช่วงเวลาที่เลือก (Summary)', 'รายละเอียด': summaryPeriodText },
+      { 'ข้อมูล': 'ยอดขายรวมสะสมทั้งหมด (บาท)', 'รายละเอียด': validOrders.reduce((sum, o) => sum + o.totalPrice, 0).toLocaleString() },
+      { 'ข้อมูล': 'ยอดขายตามช่วงเวลาที่เลือก (บาท)', 'รายละเอียด': periodRevenue.toLocaleString() },
+      { 'ข้อมูล': 'จำนวนออเดอร์', 'รายละเอียด': summaryOrders.length.toLocaleString() },
+      { 'ข้อมูล': 'สินค้าขายดีที่สุด (สรุป)', 'รายละเอียด': bestProductText }
+    ];
+
+    // 2. Timeline Section (uses dashboardPeriod)
+    const timelineSalesData = getTimelineSalesData();
+    const timelineExportData = timelineSalesData.map(([period, amt]) => ({
+      'ช่วงเวลา': period,
+      'ยอดขายรวม (บาท)': amt
+    }));
+
+    // 3. Best Seller Section (uses bestSellerMode)
+    const bestSellerData = getBestSellerProductSales();
+    const bestSellerExportData = bestSellerData.map(([name, data], idx) => ({
+      'อันดับ': idx + 1,
+      'ชื่อสินค้า': name,
+      'จำนวนที่ขายได้': data.qty,
+      'ยอดขายรวม (บาท)': data.rev
+    }));
+
+    const workbook = XLSX.utils.book_new();
+    const sheet1 = XLSX.utils.json_to_sheet(summaryData);
+    const sheet2 = XLSX.utils.json_to_sheet(timelineExportData);
+    const sheet3 = XLSX.utils.json_to_sheet(bestSellerExportData);
+
+    sheet1['!cols'] = [{ wch: 30 }, { wch: 40 }];
+    sheet2['!cols'] = [{ wch: 25 }, { wch: 25 }];
+    sheet3['!cols'] = [{ wch: 10 }, { wch: 40 }, { wch: 20 }, { wch: 20 }];
+
+    XLSX.utils.book_append_sheet(workbook, sheet1, 'สรุปภาพรวม (Summary)');
+    XLSX.utils.book_append_sheet(workbook, sheet2, 'สถิติยอดขาย (Timeline)');
+    XLSX.utils.book_append_sheet(workbook, sheet3, 'อันดับสินค้าขายดี (Best Sellers)');
+    
+    XLSX.writeFile(workbook, 'dashboard_summary_export.xlsx');
+  };
+
+  const exportDashboardToPDF = async () => {
+    try {
+      const doc = new jsPDF();
+      doc.addFileToVFS('THSarabunNew.ttf', THSarabunNewBase64);
+      doc.addFont('THSarabunNew.ttf', 'THSarabunNew', 'normal');
+      doc.setFont('THSarabunNew');
+      
+      const validOrders = orders.filter(o => o.orderStatus !== 'ยกเลิกการสั่งซื้อ' && o.orderStatus !== 'ยกเลิก');
+      
+      // 1. Summary
+      const summaryOrders = getFilteredDashboardOrders();
+      const periodRevenue = summaryOrders.reduce((sum, o) => sum + o.totalPrice, 0);
+      
+      const summaryProdSales: { [name: string]: number } = {};
+      summaryOrders.forEach(o => o.items.forEach(item => { summaryProdSales[item.productName] = (summaryProdSales[item.productName] || 0) + item.quantity; }));
+      let bestProduct = 'ไม่มีข้อมูล';
+      let maxQty = 0;
+      Object.entries(summaryProdSales).forEach(([name, qty]) => {
+        if (qty > maxQty) { maxQty = qty; bestProduct = name; }
+      });
+      const bestProductText = maxQty > 0 ? `${bestProduct} (${maxQty} ชิ้น/กก.)` : 'ไม่มีข้อมูล';
+
+      let summaryPeriodText = 'ทั้งหมด';
+      if (dashboardFilterMode === 'month') summaryPeriodText = selectedDashboardMonth;
+      if (dashboardFilterMode === 'year') summaryPeriodText = selectedDashboardYear;
+      if (dashboardFilterMode === 'range') summaryPeriodText = `${selectedDashboardStartDate || '-'} ถึง ${selectedDashboardEndDate || '-'}`;
+
+      doc.setFontSize(20);
+      doc.text(`รายงานสรุปยอดขาย (Dashboard Report)`, 14, 20);
+      
+      doc.setFontSize(16);
+      doc.text(`1. สรุปภาพรวมยอดขาย (ตามช่วงเวลา: ${summaryPeriodText})`, 14, 30);
+      doc.setFontSize(14);
+      doc.text(`- ยอดขายรวมทั้งหมด (สะสม): ${validOrders.reduce((sum, o) => sum + o.totalPrice, 0).toLocaleString()} บาท`, 20, 38);
+      doc.text(`- ยอดขายตามช่วงเวลาที่กำหนด: ${periodRevenue.toLocaleString()} บาท`, 20, 46);
+      doc.text(`- จำนวนออเดอร์ในระบบ: ${summaryOrders.length.toLocaleString()} รายการ`, 20, 54);
+      doc.text(`- สินค้าขายดีที่สุด: ${bestProductText}`, 20, 62);
+
+      // 2. Timeline
+      doc.setFontSize(16);
+      doc.text(`2. รายงานสถิติตามช่วงเวลา (${dashboardPeriod})`, 14, 75);
+      
+      const timelineData = getTimelineSalesData();
+      const timelineRows = timelineData.map(([period, amt]) => [period, amt.toLocaleString()]);
+      
+      autoTable(doc, {
+        head: [["ช่วงเวลา", "ยอดขายรวม (บาท)"]],
+        body: timelineRows,
+        startY: 80,
+        styles: { font: 'THSarabunNew', fontStyle: 'normal', cellPadding: 2, fontSize: 12 },
+        headStyles: { fillColor: [16, 185, 129], textColor: 255 }, // Emerald 500
+        columnStyles: { 0: { cellWidth: 80 }, 1: { cellWidth: 80 } },
+        margin: { bottom: 20 }
+      });
+
+      // 3. Best Sellers
+      let finalY = (doc as any).lastAutoTable.finalY + 15;
+      if (finalY > 250) {
+        doc.addPage();
+        finalY = 20;
+      }
+
+      doc.setFontSize(16);
+      doc.text(`3. อันดับสินค้าขายดี`, 14, finalY);
+      
+      const bestSellerData = getBestSellerProductSales();
+      const bestSellerRows = bestSellerData.map(([name, data], idx) => [(idx + 1).toString(), name, data.qty.toString(), data.rev.toLocaleString()]);
+
+      autoTable(doc, {
+        head: [["อันดับ", "ชื่อสินค้า", "จำนวนที่ขายได้", "ยอดขายรวม (บาท)"]],
+        body: bestSellerRows,
+        startY: finalY + 5,
+        styles: { font: 'THSarabunNew', fontStyle: 'normal', cellPadding: 2, fontSize: 12 },
+        headStyles: { fillColor: [107, 33, 168], textColor: 255 }, // Purple 700
+        columnStyles: { 0: { cellWidth: 20 }, 1: { cellWidth: 80 }, 2: { cellWidth: 30 }, 3: { cellWidth: 40 } }
+      });
+      
+      doc.save('dashboard_summary_export.pdf');
+    } catch (error) {
+      console.error('Error generating PDF:', error);
+      alert('เกิดข้อผิดพลาดในการสร้างไฟล์ PDF');
+    }
+  };
+
+  const [dashboardExportFormat, setDashboardExportFormat] = useState<string>('excel');
+  const handleDashboardExport = async () => {
+    if (dashboardExportFormat === 'excel') exportDashboardToExcel();
+    else await exportDashboardToPDF();
+  };
+
   if (!isLoaded) {
     return (
       <div className="min-h-screen bg-stone-50 flex items-center justify-center p-4">
@@ -794,6 +1116,24 @@ export default function AdminPanel() {
                                   />
                                 </div>
                               )}
+                            </div>
+
+                            <div className="flex items-center gap-2 bg-stone-50 p-2 rounded-xl border border-stone-200 mt-4 md:mt-0">
+                              <span className="text-xs font-bold text-stone-600">Export Dashboard:</span>
+                              <select
+                                value={dashboardExportFormat}
+                                onChange={(e) => setDashboardExportFormat(e.target.value)}
+                                className="bg-white border border-stone-300 text-xs font-bold px-2 py-1.5 rounded-lg focus:outline-none"
+                              >
+                                <option value="excel">Excel (.xlsx)</option>
+                                <option value="pdf">PDF (.pdf)</option>
+                              </select>
+                              <button
+                                onClick={handleDashboardExport}
+                                className="bg-purple-600 hover:bg-purple-700 text-white text-xs font-bold px-3 py-1.5 rounded-lg transition-colors shadow-sm"
+                              >
+                                ส่งออกข้อมูล
+                              </button>
                             </div>
                           </div>
 
@@ -1610,9 +1950,28 @@ export default function AdminPanel() {
                 {/* 2. ORDERS TAB */}
                 {adminTab === 'orders' && (
                   <div className="space-y-6">
-                    <div>
-                      <h3 className="text-xl font-bold text-stone-900">จัดการข้อมูลคำสั่งซื้อของลูกค้า</h3>
-                      <p className="text-sm text-stone-500 font-medium">ดูประวัติออเดอร์ ตรวจสอบการจ่ายเงิน และแก้ไขสถานะจัดส่ง</p>
+                    <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+                      <div>
+                        <h3 className="text-xl font-bold text-stone-900">จัดการข้อมูลคำสั่งซื้อของลูกค้า</h3>
+                        <p className="text-sm text-stone-500 font-medium">ดูประวัติออเดอร์ ตรวจสอบการจ่ายเงิน และแก้ไขสถานะจัดส่ง</p>
+                      </div>
+                      <div className="flex items-center gap-2 bg-stone-50 p-2 rounded-xl border border-stone-200">
+                        <span className="text-xs font-bold text-stone-600">Export:</span>
+                        <select
+                          value={exportFormat}
+                          onChange={(e) => setExportFormat(e.target.value)}
+                          className="bg-white border border-stone-300 text-xs font-bold px-2 py-1.5 rounded-lg focus:outline-none"
+                        >
+                          <option value="excel">Excel (.xlsx)</option>
+                          <option value="pdf">PDF (.pdf)</option>
+                        </select>
+                        <button
+                          onClick={handleExport}
+                          className="bg-purple-600 hover:bg-purple-700 text-white text-xs font-bold px-3 py-1.5 rounded-lg transition-colors shadow-sm"
+                        >
+                          ส่งออกข้อมูล
+                        </button>
+                      </div>
                     </div>
 
                     <div className="overflow-x-auto rounded-2xl border border-stone-100">
