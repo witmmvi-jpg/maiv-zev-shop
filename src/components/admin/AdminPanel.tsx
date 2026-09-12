@@ -45,8 +45,8 @@ export default function AdminPanel() {
   ];
 
   const initialCategoriesFallback = [
-    { id: 1, name: 'ผลไม้สด', description: 'องุ่นสดจากสวน ปลอดสารพิษ หวาน กรอบ อร่อย', image: '/images/red_grapes.png' },
-    { id: 2, name: 'ข้าวสาร', description: 'ข้าวหอมมะลิ ข้าวเหนียว ข้าวกล้อง คุณภาพระดับพรีเมียม', image: '/images/jasmine_rice.png' }
+    { id: 1, name: 'ข้าวสาร', description: 'ข้าวหอมมะลิ ข้าวเหนียว คุณภาพระดับพรีเมียม คัดสรรจากธรรมชาติ ปลอดสารเคมี 100%', image: '/images/jasmine_rice.png' },
+    { id: 2, name: 'ผลไม้สด', description: 'องุ่นไร้เมล็ด องุ่นแดงหวานกรอบ ปลูกและคัดสรรพิเศษ ปลอดภัย สดใหม่จากสวนคุณยาย', image: '/images/red_grapes.png' }
   ];
 
   const initialOrdersFallback = [
@@ -299,7 +299,15 @@ export default function AdminPanel() {
         getArticles().catch(() => []),
       ]);
       setProducts(_products && _products.length > 0 ? _products : initialProductsFallback);
-      setCategories(_categories && _categories.length > 0 ? _categories : initialCategoriesFallback);
+      const rawCategories = _categories && _categories.length > 0 ? _categories : initialCategoriesFallback;
+      const seenCategoryNames = new Set<string>();
+      const uniqueCategories = rawCategories.filter((c: any) => {
+        const name = (c.name || '').trim();
+        if (!name || seenCategoryNames.has(name)) return false;
+        seenCategoryNames.add(name);
+        return true;
+      });
+      setCategories(uniqueCategories);
       setOrders(_orders && _orders.length > 0 ? _orders : initialOrdersFallback);
       setUsers(_users && _users.length > 0 ? _users : initialUsersFallback);
       setArticles(_articles && _articles.length > 0 ? _articles : initialArticlesFallback);
@@ -671,7 +679,7 @@ export default function AdminPanel() {
 
     XLSX.utils.book_append_sheet(workbook, sheet1, 'สรุปภาพรวม (Summary)');
     XLSX.utils.book_append_sheet(workbook, sheet2, 'สถิติยอดขาย (Timeline)');
-    XLSX.utils.book_append_sheet(workbook, sheet3, 'อันดับสินค้าขายดี (Best Sellers)');
+    XLSX.utils.book_append_sheet(workbook, sheet3, 'สินค้าขายดี (Best Sellers)');
     
     XLSX.writeFile(workbook, 'dashboard_summary_export.xlsx');
   };
@@ -1694,9 +1702,9 @@ export default function AdminPanel() {
                       >
                         ทั้งหมด
                       </button>
-                      {categories.map((cat) => (
+                      {Array.from(new Map(categories.map((cat) => [(cat.name || '').trim(), cat])).values()).map((cat) => (
                         <button
-                          key={cat.id}
+                          key={cat.id || cat.name}
                           onClick={() => setAdminCategoryFilter(cat.name)}
                           className={`px-4 py-2 rounded-xl text-xs font-bold transition-all ${adminCategoryFilter === cat.name
                             ? 'bg-purple-600 text-white shadow-sm'
@@ -1891,7 +1899,7 @@ export default function AdminPanel() {
                           </tr>
                         </thead>
                         <tbody className="divide-y divide-stone-100 font-medium text-stone-700">
-                          {categories.map((cat) => (
+                          {Array.from(new Map(categories.map((cat) => [(cat.name || '').trim(), cat])).values()).map((cat) => (
                             <tr key={cat.id} className="hover:bg-stone-50/50 transition-colors">
                               <td className="p-4">
                                 <div className="relative w-12 h-12 rounded-xl overflow-hidden border border-stone-100 bg-stone-50">
@@ -2930,8 +2938,8 @@ export default function AdminPanel() {
                         onChange={(e) => setProductForm({ ...productForm, category: e.target.value })}
                         className="w-full bg-stone-50 border border-stone-200 rounded-xl px-4 py-2 text-sm focus:outline-none focus:border-purple-600 font-bold"
                       >
-                        {categories.map(c => (
-                          <option key={c.id} value={c.name}>{c.name}</option>
+                        {Array.from(new Map(categories.map((c) => [(c.name || '').trim(), c])).values()).map(c => (
+                          <option key={c.id || c.name} value={c.name}>{c.name}</option>
                         ))}
                       </select>
                     </div>

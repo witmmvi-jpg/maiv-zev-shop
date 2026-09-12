@@ -503,7 +503,14 @@ export default function MainSPA({ initialPage = 'home' }: { initialPage?: 'home'
 
         getCategories().then(dbCats => {
           if (dbCats && dbCats.length > 0) {
-            setCategories(dbCats.map((c: any) => ({ ...c, id: c.id.toString() })));
+            const seen = new Set<string>();
+            const unique = dbCats.filter((c: any) => {
+              const name = (c.name || '').trim();
+              if (!name || seen.has(name)) return false;
+              seen.add(name);
+              return true;
+            });
+            setCategories(unique.map((c: any) => ({ ...c, id: (c.id || c.category_id || '').toString() })));
           } else {
             setCategories(initialCategories);
           }
@@ -1640,9 +1647,9 @@ export default function MainSPA({ initialPage = 'home' }: { initialPage?: 'home'
                       >
                         ทั้งหมด
                       </button>
-                      {categories.map((cat) => (
+                      {Array.from(new Map(categories.map((cat) => [(cat.name || '').trim(), cat])).values()).map((cat) => (
                         <button
-                          key={cat.id}
+                          key={cat.id || cat.name}
                           onClick={() => setAdminCategoryFilter(cat.name)}
                           className={`px-4 py-2 rounded-xl text-xs font-bold transition-all ${adminCategoryFilter === cat.name
                             ? 'bg-purple-600 text-white shadow-sm'
@@ -1822,7 +1829,7 @@ export default function MainSPA({ initialPage = 'home' }: { initialPage?: 'home'
                           </tr>
                         </thead>
                         <tbody className="divide-y divide-stone-100 font-medium text-stone-700">
-                          {categories.map((cat) => (
+                          {Array.from(new Map(categories.map((cat) => [(cat.name || '').trim(), cat])).values()).map((cat) => (
                             <tr key={cat.id} className="hover:bg-stone-50/50 transition-colors">
                               <td className="p-4">
                                 <div className="relative w-12 h-12 rounded-xl overflow-hidden border border-stone-100 bg-stone-50">
@@ -2448,8 +2455,8 @@ export default function MainSPA({ initialPage = 'home' }: { initialPage?: 'home'
                         onChange={(e) => setProductForm({ ...productForm, category: e.target.value })}
                         className="w-full bg-stone-50 border border-stone-200 rounded-xl px-4 py-2 text-sm focus:outline-none focus:border-purple-600 font-bold"
                       >
-                        {categories.map(c => (
-                          <option key={c.id} value={c.name}>{c.name}</option>
+                        {Array.from(new Map(categories.map((c) => [(c.name || '').trim(), c])).values()).map(c => (
+                          <option key={c.id || c.name} value={c.name}>{c.name}</option>
                         ))}
                       </select>
                     </div>
@@ -2885,7 +2892,7 @@ export default function MainSPA({ initialPage = 'home' }: { initialPage?: 'home'
                   </div>
 
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-8 max-w-4xl mx-auto">
-                    {categories.map((category) => (
+                    {Array.from(new Map(categories.map((category) => [(category.name || '').trim(), category])).values()).map((category) => (
                       <button
                         key={category.id}
                         onClick={() => {

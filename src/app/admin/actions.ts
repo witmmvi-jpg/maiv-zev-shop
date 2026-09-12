@@ -5,31 +5,41 @@ import { revalidatePath } from 'next/cache';
 
 // Dashboard Actions
 export async function getDashboardStats() {
-  const [totalProducts, totalCategories, totalOrders, totalUsers] = await Promise.all([
-    prisma.product.count(),
-    prisma.category.count(),
-    prisma.order.count(),
-    prisma.user.count(),
-  ]);
-  return { totalProducts, totalCategories, totalOrders, totalUsers };
+  try {
+    const [totalProducts, totalCategories, totalOrders, totalUsers] = await Promise.all([
+      prisma.product.count(),
+      prisma.category.count(),
+      prisma.order.count(),
+      prisma.user.count(),
+    ]);
+    return { totalProducts, totalCategories, totalOrders, totalUsers };
+  } catch (err: any) {
+    console.warn('getDashboardStats DB error:', err?.message || err);
+    return { totalProducts: 0, totalCategories: 0, totalOrders: 0, totalUsers: 0 };
+  }
 }
 
 // Product Actions
 export async function getProducts() {
-  const products = await prisma.product.findMany({ orderBy: { product_id: 'asc' } });
-  return products.map(p => ({
-    id: p.product_id,
-    name: p.product_name,
-    description: p.description || '',
-    benefits: p.benefits || '',
-    price: p.price.toNumber(),
-    originalPrice: p.original_price ? p.original_price.toNumber() : undefined,
-    promotionText: p.promotion_text || '',
-    stock: p.stock,
-    image: p.image_url || '',
-    unit: p.unit || 'กก.',
-    category: p.category_name || 'ผลไม้สด'
-  }));
+  try {
+    const products = await prisma.product.findMany({ orderBy: { product_id: 'asc' } });
+    return products.map(p => ({
+      id: p.product_id,
+      name: p.product_name,
+      description: p.description || '',
+      benefits: p.benefits || '',
+      price: p.price.toNumber(),
+      originalPrice: p.original_price ? p.original_price.toNumber() : undefined,
+      promotionText: p.promotion_text || '',
+      stock: p.stock,
+      image: p.image_url || '',
+      unit: p.unit || 'กก.',
+      category: p.category_name || 'ผลไม้สด'
+    }));
+  } catch (err: any) {
+    console.warn('admin getProducts DB error:', err?.message || err);
+    return [];
+  }
 }
 
 export async function createProduct(data: any) {
@@ -80,15 +90,27 @@ export async function deleteProduct(id: number) {
 
 // Category Actions
 export async function getCategories() {
-  const categories = await prisma.category.findMany({ orderBy: { category_id: 'asc' } });
-  return categories.map(c => ({
-    id: c.category_id,
-    name: c.name,
-    description: c.description || '',
-    image: c.image || '/images/red_grapes.png',
-    gradient: c.gradient || 'from-emerald-50/50 to-purple-50/50 hover:from-emerald-100/50 hover:to-purple-100/50',
-    badgeColor: c.badge_color || 'bg-emerald-100 text-emerald-850 border-emerald-200'
-  }));
+  try {
+    const categories = await prisma.category.findMany({ orderBy: { category_id: 'asc' } });
+    const seen = new Set<string>();
+    const unique = categories.filter(c => {
+      const name = (c.name || '').trim();
+      if (!name || seen.has(name)) return false;
+      seen.add(name);
+      return true;
+    });
+    return unique.map(c => ({
+      id: c.category_id,
+      name: c.name.trim(),
+      description: c.description || '',
+      image: c.image || '/images/red_grapes.png',
+      gradient: c.gradient || 'from-emerald-50/50 to-purple-50/50 hover:from-emerald-100/50 hover:to-purple-100/50',
+      badgeColor: c.badge_color || 'bg-emerald-100 text-emerald-850 border-emerald-200'
+    }));
+  } catch (err: any) {
+    console.warn('admin getCategories DB error:', err?.message || err);
+    return [];
+  }
 }
 
 export async function createCategory(data: any) {
@@ -258,15 +280,20 @@ export async function updateOrderStatus(id: string, data: { paymentStatus?: stri
 
 // User Actions
 export async function getUsers() {
-  const users = await prisma.user.findMany({ orderBy: { created_at: 'desc' } });
-  return users.map(u => ({
-    id: u.user_id,
-    username: u.username,
-    email: u.email,
-    phone: u.phone || '',
-    role: u.role,
-    profileImage: u.profile_image || '',
-  }));
+  try {
+    const users = await prisma.user.findMany({ orderBy: { created_at: 'desc' } });
+    return users.map(u => ({
+      id: u.user_id,
+      username: u.username,
+      email: u.email,
+      phone: u.phone || '',
+      role: u.role,
+      profileImage: u.profile_image || '',
+    }));
+  } catch (err: any) {
+    console.warn('admin getUsers DB error:', err?.message || err);
+    return [];
+  }
 }
 
 export async function createUser(data: {
@@ -337,16 +364,21 @@ export async function deleteUser(id: number) {
 
 // Article Actions
 export async function getArticles() {
-  const articles = await prisma.article.findMany({ orderBy: { article_id: 'desc' } });
-  return articles.map(a => ({
-    id: a.article_id,
-    title: a.title,
-    excerpt: a.excerpt || '',
-    content: a.content || '',
-    image: a.image || '',
-    category: a.category || 'สาระน่ารู้',
-    date: a.date ? a.date.toISOString().split('T')[0] : new Date().toISOString().split('T')[0],
-  }));
+  try {
+    const articles = await prisma.article.findMany({ orderBy: { article_id: 'desc' } });
+    return articles.map(a => ({
+      id: a.article_id,
+      title: a.title,
+      excerpt: a.excerpt || '',
+      content: a.content || '',
+      image: a.image || '',
+      category: a.category || 'สาระน่ารู้',
+      date: a.date ? a.date.toISOString().split('T')[0] : new Date().toISOString().split('T')[0],
+    }));
+  } catch (err: any) {
+    console.warn('admin getArticles DB error:', err?.message || err);
+    return [];
+  }
 }
 
 export async function createArticle(data: {

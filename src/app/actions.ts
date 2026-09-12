@@ -25,7 +25,7 @@ export async function uploadFile(formData: FormData): Promise<{ url: string }> {
 
   // 1. Primary Method: Supabase Storage Cloud Upload
   const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || process.env.SUPABASE_SERVICE_ROLE_KEY;
-  if (supabaseKey) {
+  if (supabaseKey && supabase) {
     try {
       const rawExt = path.extname(file.name).slice(1).toLowerCase();
       const ext = /^[a-z0-9]{1,5}$/.test(rawExt) ? rawExt : (file.type.split('/')[1] || 'webp');
@@ -95,47 +95,62 @@ export async function uploadFile(formData: FormData): Promise<{ url: string }> {
 }
 
 export async function getArticles() {
-  const articles = await prisma.article.findMany({
-    orderBy: { date: 'desc' }
-  });
-  return articles.map(a => ({
-    id: a.article_id.toString(),
-    title: a.title,
-    excerpt: a.excerpt || '',
-    content: a.content || '',
-    image: a.image || '',
-    category: a.category || '',
-    date: a.date ? a.date.toISOString().split('T')[0] : ''
-  }));
+  try {
+    const articles = await prisma.article.findMany({
+      orderBy: { date: 'desc' }
+    });
+    return articles.map(a => ({
+      id: a.article_id.toString(),
+      title: a.title,
+      excerpt: a.excerpt || '',
+      content: a.content || '',
+      image: a.image || '',
+      category: a.category || '',
+      date: a.date ? a.date.toISOString().split('T')[0] : ''
+    }));
+  } catch (err: any) {
+    console.warn('getArticles DB fetch failed, returning empty array:', err?.message || err);
+    return [];
+  }
 }
 
 export async function getProducts() {
-  const products = await prisma.product.findMany({ orderBy: { product_id: 'asc' } });
-  return products.map(p => ({
-    id: p.product_id.toString(),
-    name: p.product_name,
-    description: p.description || '',
-    price: Number(p.price),
-    originalPrice: p.original_price ? Number(p.original_price) : undefined,
-    promotionText: p.promotion_text || undefined,
-    unit: p.unit || 'กก.',
-    image: p.image_url || '',
-    category: p.category_name || 'ผลไม้สด',
-    stock: p.stock,
-    benefits: p.benefits || undefined,
-  }));
+  try {
+    const products = await prisma.product.findMany({ orderBy: { product_id: 'asc' } });
+    return products.map(p => ({
+      id: p.product_id.toString(),
+      name: p.product_name,
+      description: p.description || '',
+      price: Number(p.price),
+      originalPrice: p.original_price ? Number(p.original_price) : undefined,
+      promotionText: p.promotion_text || undefined,
+      unit: p.unit || 'กก.',
+      image: p.image_url || '',
+      category: p.category_name || 'ผลไม้สด',
+      stock: p.stock,
+      benefits: p.benefits || undefined,
+    }));
+  } catch (err: any) {
+    console.warn('getProducts DB fetch failed, returning empty array:', err?.message || err);
+    return [];
+  }
 }
 
 export async function getUsers() {
-  const users = await prisma.user.findMany();
-  return users.map(u => ({
-    username: u.username,
-    email: u.email,
-    role: u.role as 'Admin' | 'Member' | 'User',
-    password: u.password,
-    phone: u.phone || undefined,
-    profileImage: u.profile_image || '',
-  }));
+  try {
+    const users = await prisma.user.findMany();
+    return users.map(u => ({
+      username: u.username,
+      email: u.email,
+      role: u.role as 'Admin' | 'Member' | 'User',
+      password: u.password,
+      phone: u.phone || undefined,
+      profileImage: u.profile_image || '',
+    }));
+  } catch (err: any) {
+    console.warn('getUsers DB fetch failed:', err?.message || err);
+    return [];
+  }
 }
 
 export async function getOrders() {
@@ -223,25 +238,30 @@ export async function getOrders() {
 }
 
 export async function getReviews() {
-  const reviews = await prisma.productReview.findMany({
-    orderBy: { created_at: 'desc' },
-    include: {
-      user: true,
-      product: true
-    }
-  });
+  try {
+    const reviews = await prisma.productReview.findMany({
+      orderBy: { created_at: 'desc' },
+      include: {
+        user: true,
+        product: true
+      }
+    });
 
-  return reviews.map(r => ({
-    id: r.review_id.toString(),
-    productId: r.product_id?.toString() || '',
-    username: r.user?.username || 'ผู้ใช้งาน',
-    userProfileImage: r.user?.profile_image || undefined,
-    rating: r.rating,
-    comment: r.comment || '',
-    mediaUrl: r.media_url || undefined,
-    mediaType: (r.media_type as 'image' | 'video' | 'none') || 'none',
-    createdAt: r.created_at ? r.created_at.toISOString().replace('T', ' ').substring(0, 16) : new Date().toISOString().replace('T', ' ').substring(0, 16),
-  }));
+    return reviews.map(r => ({
+      id: r.review_id.toString(),
+      productId: r.product_id?.toString() || '',
+      username: r.user?.username || 'ผู้ใช้งาน',
+      userProfileImage: r.user?.profile_image || undefined,
+      rating: r.rating,
+      comment: r.comment || '',
+      mediaUrl: r.media_url || undefined,
+      mediaType: (r.media_type as 'image' | 'video' | 'none') || 'none',
+      createdAt: r.created_at ? r.created_at.toISOString().replace('T', ' ').substring(0, 16) : new Date().toISOString().replace('T', ' ').substring(0, 16),
+    }));
+  } catch (err: any) {
+    console.warn('getReviews DB fetch failed:', err?.message || err);
+    return [];
+  }
 }
 
 export async function createUser(data: { username: string; email: string; password?: string; phone?: string; role?: string; profileImage?: string }) {
@@ -510,7 +530,24 @@ export async function deleteProduct(id: string) {
 
 // --- Category Actions ---
 export async function getCategories() {
-  return await prisma.category.findMany({ orderBy: { category_id: 'asc' } });
+  try {
+    const raw = await prisma.category.findMany({ orderBy: { category_id: 'asc' } });
+    const seen = new Set<string>();
+    return raw
+      .filter(c => {
+        const name = (c.name || '').trim();
+        if (!name || seen.has(name)) return false;
+        seen.add(name);
+        return true;
+      })
+      .map(c => ({
+        ...c,
+        id: c.category_id,
+      }));
+  } catch (err: any) {
+    console.warn('getCategories DB fetch failed:', err?.message || err);
+    return [];
+  }
 }
 
 export async function createCategory(data: { name: string; description: string; image: string; gradient: string; badgeColor: string }) {
@@ -549,23 +586,28 @@ export async function deleteCategory(id: string) {
 
 // --- Chat Actions ---
 export async function getChats() {
-  const threads = await prisma.chatThread.findMany({
-    include: { messages: true },
-    orderBy: { last_updated: 'desc' }
-  });
+  try {
+    const threads = await prisma.chatThread.findMany({
+      include: { messages: true },
+      orderBy: { last_updated: 'desc' }
+    });
 
-  const emails = threads.map(t => t.user_email).filter(Boolean);
-  const users = await prisma.user.findMany({
-    where: { email: { in: emails } },
-    select: { email: true, profile_image: true }
-  });
+    const emails = threads.map(t => t.user_email).filter(Boolean);
+    const users = await prisma.user.findMany({
+      where: { email: { in: emails } },
+      select: { email: true, profile_image: true }
+    });
 
-  const userMap = new Map(users.map(u => [u.email, u.profile_image]));
+    const userMap = new Map(users.map(u => [u.email, u.profile_image]));
 
-  return threads.map(t => ({
-    ...t,
-    profileImage: userMap.get(t.user_email) || ''
-  }));
+    return threads.map(t => ({
+      ...t,
+      profileImage: userMap.get(t.user_email) || ''
+    }));
+  } catch (err: any) {
+    console.warn('getChats DB fetch failed:', err?.message || err);
+    return [];
+  }
 }
 
 export async function sendMessage(userEmail: string, username: string, sender: 'user' | 'admin' | 'bot', text: string) {
